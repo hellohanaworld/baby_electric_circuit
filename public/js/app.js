@@ -598,7 +598,8 @@
       return;
     }
     const w = e.target.closest('[data-wid]');
-    if (w) { S.selWire = +w.dataset.wid; S.sel = null; sfx.click(); renderBoard(); return; }
+    // 전선은 아무 데나 콕 누르면 바로 지워져요
+    if (w) { const id = +w.dataset.wid; S.wires = S.wires.filter(x => x.id !== id); S.selWire = null; S.sel = null; sfx.remove(); recompute(); return; }
     if (S.sel || S.selWire) { S.sel = null; S.selWire = null; renderBoard(); }
   });
 
@@ -1037,7 +1038,7 @@
         html += `<circle class="guide-ring" cx="${geo.mid.x}" cy="${geo.mid.y}" r="30"/>`;
         html += `<g transform="translate(${geo.mid.x - 14} ${geo.mid.y + 34})"><text class="guide-hand tap" font-size="46">👆</text></g>`;
       }
-      say = S.an && S.an.status === 'short' ? '앗 뜨거워요! 반짝이는 전선을 콕 누르고, 빨간 ✖를 눌러서 지워요.' : '반짝이는 전선을 콕 누르고, 빨간 ✖를 눌러서 지워 봐요.';
+      say = S.an && S.an.status === 'short' ? '앗 뜨거워요! 반짝이는 전선을 콕 눌러서 지워요.' : '반짝이는 전선을 콕 눌러서 지워 봐요.';
     } else if (g.type === 'palette') {
       const el = document.querySelector(`.pal-item[data-kind="${g.kind}"]`);
       if (el) { el.classList.add('guide'); el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }

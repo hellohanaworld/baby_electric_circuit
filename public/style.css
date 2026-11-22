@@ -432,3 +432,6 @@ body { background: linear-gradient(180deg, #d7f0ff 0%, #fdf6e3 100%); }
 .m-dots { flex-wrap: nowrap; gap: 3px; }
 .m-dots .dot { width: 22px; height: 22px; font-size: 12px; flex: none; }
 .mw-title { text-align: left; }
+/* v10: 전선은 아무 데나 눌러도 지워져요 (보이는 호스는 터치를 통과시키고, 넓은 투명 선이 받아요) */
+.wire, .wire.trunk, .ghost-wire { pointer-events: none; }
+.wire-hit { stroke-width: 40; stroke-linecap: round; }
