@@ -394,3 +394,41 @@ body { background: linear-gradient(180deg, #d7f0ff 0%, #fdf6e3 100%); }
   background: #fff3bf; border: 3px solid #fcc419; color: #5c3c00; padding: 8px 16px; border-radius: 999px; font-size: 17px;
   white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,.1);
 }
+
+/* ========== 👆 다음 할 일 손가락 안내 (v8) ========== */
+#l-guide { pointer-events: none; }
+.guide-line { fill: none; stroke: #ff922b; stroke-width: 6; stroke-dasharray: 4 12; stroke-linecap: round; animation: march 0.8s linear infinite; opacity: .9; }
+@keyframes march { to { stroke-dashoffset: -32; } }
+.guide-ring { fill: rgba(255, 212, 59, .25); stroke: #ff922b; stroke-width: 5; animation: ring 1s ease-in-out infinite; }
+.guide-ring.b { animation-delay: .5s; }
+@keyframes ring { 0%, 100% { stroke-width: 5; opacity: 1; } 50% { stroke-width: 10; opacity: .6; } }
+.guide-num { font-size: 26px; text-anchor: middle; fill: #e8590c; paint-order: stroke; stroke: #fff; stroke-width: 6px; font-weight: bold; }
+.guide-hand { filter: drop-shadow(0 3px 3px rgba(0,0,0,.3)); }
+.guide-hand.tap { animation: tap .7s ease-in-out infinite alternate; }
+@keyframes tap { from { transform: translateY(0); } to { transform: translateY(-14px); } }
+.pal-item.guide { border-color: #ff922b !important; animation: palGlow .7s ease-in-out infinite alternate; position: relative; }
+.pal-item.guide::after { content: '👉'; position: absolute; right: -8px; top: 30%; font-size: 34px; animation: point .7s ease-in-out infinite alternate; }
+@keyframes palGlow { from { box-shadow: 0 0 0 0 rgba(255,146,43,.8); } to { box-shadow: 0 0 0 10px rgba(255,146,43,0); transform: scale(1.05); } }
+
+/* ---------- v9 스테이지 ---------- */
+.ghost-wire { fill: none; stroke: #ffd43b; stroke-width: 9; stroke-linecap: round; stroke-dasharray: 2 18;
+  pointer-events: none; animation: ghost-march 1.2s linear infinite; opacity: .95; }
+@keyframes ghost-march { to { stroke-dashoffset: -40; } }
+.m-label { display: inline-block; background: #339af0; color: #fff; border-radius: 12px; padding: 1px 10px; font-size: .8em; margin-right: 2px; }
+.next-world { font-size: 20px; margin: 4px 0 10px; }
+#map-grid { display: flex; flex-direction: column; gap: 10px; }
+.map-world { border: 3px solid #e9ecef; border-radius: 16px; padding: 8px 12px; background: #fff; }
+.map-world.locked { opacity: .5; }
+.mw-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.mw-head .mi-emoji { font-size: 26px; }
+.mw-title { font-weight: 700; font-size: 17px; flex: 1; }
+.mw-got { font-size: 14px; color: #868e96; }
+.mw-stages { display: flex; flex-wrap: wrap; gap: 6px; }
+.map-st { width: 42px; height: 42px; border-radius: 50%; border: 3px solid #dee2e6; background: #f8f9fa; font-size: 16px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.map-st:hover:not(.locked) { border-color: #339af0; transform: scale(1.08); }
+.map-st.done { background: #fff3bf; border-color: #ffd43b; }
+.map-st.cur { box-shadow: 0 0 0 4px #74c0fc; }
+.map-st.locked { opacity: .5; cursor: not-allowed; font-size: 13px; }
+.m-dots { flex-wrap: nowrap; gap: 3px; }
+.m-dots .dot { width: 22px; height: 22px; font-size: 12px; flex: none; }
+.mw-title { text-align: left; }

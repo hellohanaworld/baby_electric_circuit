@@ -1,4 +1,4 @@
-/* 꼬마 전기 실험실 - 미션 목록 (쉬운 것부터 아주 조금씩 어렵게)
+/* 꼬마 전기 실험실 - 월드(주제) 10개 + 자유 실험실. 스테이지는 stages.js 에서 만들어요
  * story / goal / hint / learn / say : 아이용 (짧고 쉬운 말)
  * parent : 엄마 아빠용 자세한 설명 (ⓘ 버튼으로 열림)
  */
@@ -6,7 +6,7 @@
   'use strict';
   const inRange = (x, a, b) => x >= a && x <= b;
 
-  global.MISSIONS = [
+  const BASE = [
     {
       emoji: '💡', title: '불을 켜요',
       story: '전구에 불을 켜 볼까요? 동그란 점을 꾹 누르고 다른 점까지 쭉~ 끌어요!',
@@ -212,4 +212,5 @@
         <li>전지 4개를 전구에 바로 이으면? (2A → 전구가 끊어짐)</li></ul>`
     }
   ];
+  global.WORLD_BASE = BASE;
 })(window);

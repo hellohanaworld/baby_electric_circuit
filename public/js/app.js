@@ -6,13 +6,13 @@
   const svg = $('#board');
   const L = {
     wires: $('#l-wires'), flow: $('#l-flow'), comps: $('#l-comps'),
-    labels: $('#l-labels'), terms: $('#l-terms'), ui: $('#l-ui'), wave: $('#l-wave')
+    labels: $('#l-labels'), terms: $('#l-terms'), ui: $('#l-ui'), wave: $('#l-wave'), guide: $('#l-guide')
   };
   const dragPath = $('#drag-wire');
   const GRID = 20, BW = 1000, BH = 640;
   const WIRE_COLORS = ['#e03131', '#1c7ed6', '#2f9e44', '#f08c00', '#9c36b5', '#0c8599'];
   const SPEED = 110;           // 전류 1A 일 때 점이 움직이는 속도 (px/초)
-  const STORE = 'kkoma-circuit-v1';
+  const STORE = 'kkoma-circuit-v2';   // v2: 스테이지(1-1 …) 방식
   const ORDER = ['battery', 'bulb', 'switch', 'motor', 'resistor', 'clip', 'coin', 'eraser', 'chopstick', 'pencil'];
 
   /* ---------- 저장 ---------- */
@@ -21,6 +21,7 @@
   try {
     const s = JSON.parse(localStorage.getItem(STORE) || 'null');
     if (s) { Object.assign(progress, s.progress || {}); Object.assign(settings, s.settings || {}); }
+    else { const old = JSON.parse(localStorage.getItem('kkoma-circuit-v1') || 'null'); if (old) Object.assign(settings, old.settings || {}); }
   } catch (e) { /* 저장소를 못 써도 게임은 됨 */ }
   function save() { try { localStorage.setItem(STORE, JSON.stringify({ progress, settings })); } catch (e) { } }
 
@@ -76,7 +77,8 @@
       const clean = text.replace(/<[^>]+>/g, ' ').replace(/\p{Extended_Pictographic}/gu, '')
         .replace(/(\d)\.(\d)V/g, '$1점$2볼트').replace(/(\d)V/g, '$1볼트')
         .replace(/(\d)\.(\d+)A/g, '$1점$2암페어').replace(/(\d)A/g, '$1암페어').replace(/(\d)Ω/g, '$1옴')
-        .replace(/＋/g, '플러스 ').replace(/−/g, '마이너스 ');
+        .replace(/＋/g, '플러스 ').replace(/−/g, '마이너스 ')
+        .replace(/[①-⑮]/g, ch => (ch.charCodeAt(0) - 0x2460 + 1) + '번');
       const u = new SpeechSynthesisUtterance(clean);
       u.lang = 'ko-KR'; u.rate = 0.95; u.pitch = 1.1;
       const v = speechSynthesis.getVoices().find(v => v.lang && v.lang.toLowerCase().startsWith('ko'));
@@ -272,6 +274,15 @@
       fl.push({ key: 'j' + cid + '_' + t, d: fwd ? `M${p.x} ${p.y} L${q.x} ${q.y}` : `M${q.x} ${q.y} L${p.x} ${p.y}`,
         from: fwd ? k : k + '*', to: fwd ? k + '*' : k, A: Math.abs(net) });
     }
+    // 점선 길잡이: 여기를 이으면 돼요 (X-1 스테이지)
+    for (const gw of S.ghost || []) {
+      const a = getComp(gw.a.c), b = getComp(gw.b.c); if (!a || !b) continue;
+      const done = S.wires.some(w => (w.a.c === gw.a.c && w.a.t === gw.a.t && w.b.c === gw.b.c && w.b.t === gw.b.t) ||
+        (w.a.c === gw.b.c && w.a.t === gw.b.t && w.b.c === gw.a.c && w.b.t === gw.a.t));
+      if (done) continue;
+      const p1 = termPos(a, gw.a.t), p2 = termPos(b, gw.b.t);
+      wHtml += `<path class="ghost-wire" d="${bez(p1, p1.n, p2, p2.n, 0).d}"/>`;
+    }
     for (const w of S.wires) {
       const g = wireGeom(w, deg); if (!g) continue;
       connected.add(w.a.c + ':' + w.a.t); connected.add(w.b.c + ':' + w.b.t);
@@ -297,7 +308,7 @@
       lHtml += labelSVG(c, o);
       for (const t of [0, 1]) {
         const p = termPos(c, t), on = connected.has(c.id + ':' + t);
-        const pulse = !S.wires.length || (S.level === 0 && !on);
+        const pulse = !S.wires.length || (mission().guided && !on);
         tHtml += `<circle class="term${on ? ' on' : ''}${pulse ? ' pulse' : ''}" data-term="${c.id}:${t}" cx="${p.x}" cy="${p.y}" r="11"/>`;
         if (c.kind === 'battery') {
           tHtml += `<text class="term-pol${t ? ' plus' : ''}" x="${p.x}" y="${p.y + 5}">${t ? '+' : '−'}</text>`;
@@ -404,17 +415,20 @@
   }
 
   /* ---------- 오른쪽 패널 ---------- */
+  const WORLDS = window.WORLDS;
+  const stageName = m => m.free ? m.title : `${m.label} ${m.title}`;
   function renderMission() {
     const m = mission();
     const ctx = ctxFor();
     let items = m.progress ? m.progress(ctx) : [{ text: m.goal, done: S.succeeded }];
     if (m.check === null) items = [];
     const done = progress.done.includes(S.level);
-    const stars = MISSIONS.map((_, i) => `<span class="dot${progress.done.includes(i) ? ' got' : ''}${i === S.level ? ' cur' : ''}">${progress.done.includes(i) ? '⭐' : i + 1}</span>`).join('');
+    const wd = WORLDS[m.world] || { first: S.level, count: 1 };
+    const stars = m.free ? '' : Array.from({ length: wd.count }, (_, k) => wd.first + k).map(i => `<span class="dot${progress.done.includes(i) ? ' got' : ''}${i === S.level ? ' cur' : ''}">${progress.done.includes(i) ? '⭐' : i - wd.first + 1}</span>`).join('');
     $('#mission').innerHTML = `
       <button class="info-i" id="btn-m-info" title="엄마 아빠 설명">i</button>
       <div class="m-dots">${stars}</div>
-      <div class="m-head"><span class="m-emoji">${m.emoji}</span><h2>${m.title}${done ? ' ⭐' : ''}</h2></div>
+      <div class="m-head"><span class="m-emoji">${m.emoji}</span><h2>${m.free ? '' : `<span class="m-label">${m.label}</span> `}${m.title}${done ? ' ⭐' : ''}</h2></div>
       <p class="m-story">${m.story}</p>
       ${items.length ? `<ul class="m-goals">${items.map(g => `<li class="${g.done ? 'done' : ''}${g.extra ? ' extra' : ''}">${g.done ? '✅' : '⭐'} ${g.text}</li>`).join('')}</ul>` : ''}
       <div class="m-btns">
@@ -425,9 +439,9 @@
       <div class="m-hint${S.hintShown ? '' : ' hidden'}" id="hint-box">${S.hintShown || ''}</div>`;
     $('#btn-say').onclick = () => speak(m.story);
     $('#btn-hint').onclick = giveHint;
-    $('#btn-m-info').onclick = () => openParent(`미션 ${S.level + 1}. ${m.title}`, m.parent);
+    $('#btn-m-info').onclick = () => openParent(stageName(m), m.parent);
     const n2 = $('#btn-next2'); if (n2) n2.onclick = () => loadLevel(S.level + 1);
-    $('#level-title').textContent = `${S.level + 1}. ${m.title}`;
+    $('#level-title').textContent = stageName(m);
   }
 
   function renderNote() {
@@ -793,17 +807,21 @@
     sfx.success();
     confetti();
     const hasNext = S.level < MISSIONS.length - 1;
+    const worldDone = !m.free && m.stage === 9;
+    const nx = MISSIONS[S.level + 1];
     $('#success-body').innerHTML = `<button class="info-i" id="btn-s-info" title="엄마 아빠 설명">i</button>
-      <div class="succ-emoji">🎉</div><h2>잘했어요!</h2><div class="learn">${m.learn}</div>
+      <div class="succ-emoji">${worldDone ? '🏆' : '🎉'}</div><h2>${worldDone ? `${m.title} 다 깼어요!` : `${m.label} 잘했어요!`}</h2>
+      ${worldDone && nx ? `<p class="next-world">다음 모험: ${nx.emoji} <b>${nx.title}</b></p>` : ''}
+      <div class="learn">${m.learn}</div>
       <div class="m-btns center">
         <button class="pill" data-close>🔬 더 놀래요</button>
         ${hasNext ? '<button class="pill go big" id="btn-next">다음 ▶</button>' : '<button class="pill go big" data-close>🏆 다 했어요!</button>'}
       </div>`;
-    $('#btn-s-info').onclick = () => openParent(`미션 ${S.level + 1}. ${m.title}`, m.parent);
+    $('#btn-s-info').onclick = () => openParent(stageName(m), m.parent);
     $('#success-body').querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeModals));
     const nb = $('#btn-next'); if (nb) nb.onclick = () => { closeModals(); loadLevel(S.level + 1); };
     openModal('#success');
-    speak(m.say || '성공!');
+    speak(worldDone ? `우와! ${m.title} 열 개를 다 깼어요! ` + (m.say || '') : (m.say || '성공!'));
     renderMission();
   }
 
@@ -828,12 +846,21 @@
     }
   }
 
-  function unlocked(i) { return progress.unlockAll || i === 0 || progress.done.includes(i - 1) || progress.done.includes(i); }
+  function unlocked(i) {
+    const m = MISSIONS[i];
+    return progress.unlockAll || i === 0 || (m && m.free) || progress.done.includes(i - 1) || progress.done.includes(i);
+  }
   function renderMap() {
-    $('#map-grid').innerHTML = MISSIONS.map((m, i) => {
-      const done = progress.done.includes(i), open = unlocked(i);
-      return `<button class="map-item${done ? ' done' : ''}${open ? '' : ' locked'}${i === S.level ? ' cur' : ''}" data-lv="${i}" ${open ? '' : 'disabled'}>
-        <span class="mi-emoji">${open ? m.emoji : '🔒'}</span><span class="mi-no">${i + 1}</span><span class="mi-title">${m.title}</span>${done ? '<span class="mi-star">⭐</span>' : ''}</button>`;
+    $('#map-grid').innerHTML = WORLDS.map((w, wi) => {
+      const ids = Array.from({ length: w.count }, (_, k) => w.first + k);
+      const got = ids.filter(i => progress.done.includes(i)).length, open = ids.some(unlocked);
+      const btns = ids.map(i => {
+        const m = MISSIONS[i], done = progress.done.includes(i), op = unlocked(i);
+        return `<button class="map-st${done ? ' done' : ''}${op ? '' : ' locked'}${i === S.level ? ' cur' : ''}" data-lv="${i}" ${op ? '' : 'disabled'}>${done ? '⭐' : op ? (m.free ? '🔬' : m.stage + 1) : '🔒'}</button>`;
+      }).join('');
+      return `<div class="map-world${open ? '' : ' locked'}"><div class="mw-head"><span class="mi-emoji">${open ? w.emoji : '🔒'}</span>
+        <span class="mw-title">${w.count > 1 ? (wi + 1) + '. ' : ''}${w.title}</span>${w.count > 1 ? `<span class="mw-got">⭐ ${got}/${w.count}</span>` : ''}</div>
+        <div class="mw-stages">${btns}</div></div>`;
     }).join('');
     $('#map-grid').querySelectorAll('[data-lv]').forEach(b => b.onclick = () => { closeModals(); loadLevel(+b.dataset.lv); });
   }
@@ -844,7 +871,7 @@
   const IDLE_MS = 20000;      // 20초 동안 아무것도 안 하면
   const LONG_MS = 90000;      // 이것저것 해도 1분 30초 넘게 못 풀면
   const GAP_MS = 45000;       // 알려주는 간격
-  window.addEventListener('pointerdown', () => { lastAct = performance.now(); }, true);
+  window.addEventListener('pointerdown', e => { lastAct = performance.now(); if (!e.target.closest('#btn-hint')) clearGuide(); }, true);
 
   function anyModalOpen() { return [...document.querySelectorAll('.modal')].some(m => !m.classList.contains('hidden')); }
 
@@ -873,10 +900,161 @@
     return parts.join('<br>');
   }
 
+  /* ---------- 다음에 할 일 찾기: 가능한 행동을 미리 해 보고 가장 좋아지는 것을 골라요 ---------- */
+  function simState(comps, wires, memo) {
+    const sol = C.solve(comps, wires);
+    const an = C.analyze(comps, wires, sol);
+    const ctx = {
+      comps, sol, an, memo, KINDS,
+      I: c => sol.comp[c.id].I, A: c => Math.abs(sol.comp[c.id].I),
+      of: k => comps.filter(c => c.kind === k),
+      lit: () => comps.filter(c => c.kind === 'bulb' && !c.broken && Math.abs(sol.comp[c.id].I) > PHYS.LIT_A),
+      name: c => C.displayName(c),
+      wouldConduct: c => C.wouldConduct(comps, wires, c),
+      toast: () => { }
+    };
+    const m = mission();
+    let ok = false, done = 0;
+    const short = an.status === 'short';
+    const burn = comps.some(c => c.kind === 'bulb' && !c.broken && Math.abs(sol.comp[c.id].I) > PHYS.BURN_A);
+    if (m.check && !short) {
+      try { ok = !!m.check(ctx); } catch (e) { ok = false; }
+      if (m.progress) try { done = m.progress(ctx).filter(x => x.done && !x.extra).length; } catch (e) { }
+    }
+    const lit = ctx.lit().length;
+    const score = (ok ? 1000 : 0) + done * 100 + lit * 10 + (an.status === 'ok' ? 5 : 0) - (short ? 2000 : 0) - (burn ? 800 : 0);
+    return { score, ok, short, burn };
+  }
+
+  function eul(word) {   // 받침 있으면 '을', 없으면 '를' (①은 '1번'으로 읽어서 '을')
+    const ch = word.charCodeAt(word.length - 1);
+    if (ch >= 0x2460 && ch <= 0x246E) return word + '을';
+    if (ch >= 0xAC00 && ch <= 0xD7A3) return word + ((ch - 0xAC00) % 28 ? '을' : '를');
+    return word + '을';
+  }
+  function termName(c, t) {
+    if (c.kind === 'battery') return `${C.displayName(c)}의 ${t ? '＋' : '−'} 점`;
+    const p = termPos(c, t), q = termPos(c, 1 - t);
+    const side = Math.abs(p.x - q.x) >= Math.abs(p.y - q.y) ? (p.x < q.x ? '왼쪽' : '오른쪽') : (p.y < q.y ? '위쪽' : '아래쪽');
+    return `${C.displayName(c)}의 ${side} 점`;
+  }
+
+  function candidateActions() {
+    const acts = [];
+    const terms = [];
+    for (const c of S.comps) for (const t of [0, 1]) terms.push({ c: c.id, t });
+    const has = (a, b) => S.wires.some(w => (w.a.c === a.c && w.a.t === a.t && w.b.c === b.c && w.b.t === b.t) || (w.a.c === b.c && w.a.t === b.t && w.b.c === a.c && w.b.t === a.t));
+    for (let i = 0; i < terms.length; i++) for (let j = i + 1; j < terms.length; j++) {
+      const a = terms[i], b = terms[j];
+      if (a.c === b.c || has(a, b)) continue;   // 같은 부품 양쪽을 바로 잇는 건 빼요
+      const pa = termPos(getComp(a.c), a.t), pb = termPos(getComp(b.c), b.t);
+      acts.push({ type: 'wire', a, b, cost: Math.hypot(pa.x - pb.x, pa.y - pb.y) / 1000 });
+    }
+    for (const c of S.comps) if (c.kind === 'switch') acts.push({ type: 'toggle', id: c.id, cost: 0.2 });
+    for (const c of S.comps) if (c.kind === 'bulb' && c.broken) acts.push({ type: 'fix', id: c.id, cost: 0 });
+    for (const w of S.wires) acts.push({ type: 'unwire', id: w.id, cost: 0.5 });
+    return acts;
+  }
+
+  function applyAct(st, act) {
+    let comps = st.comps, wires = st.wires;
+    if (act.type === 'wire') wires = wires.concat([{ id: -1 - wires.length, a: act.a, b: act.b }]);
+    if (act.type === 'unwire') wires = wires.filter(w => w.id !== act.id);
+    if (act.type === 'toggle') comps = comps.map(c => c.id === act.id ? Object.assign({}, c, { open: !c.open }) : c);
+    if (act.type === 'fix') comps = comps.map(c => c.id === act.id ? Object.assign({}, c, { broken: false }) : c);
+    return { comps, wires };
+  }
+
+  function planGuide() {
+    const m = mission();
+    const clone = () => JSON.parse(JSON.stringify(S.memo || {}));
+    const base = { comps: S.comps.map(c => Object.assign({}, c)), wires: S.wires.slice() };
+    const now = simState(base.comps, base.wires, clone()).score;
+
+    // 1) 재료가 아예 부족하면 재료 상자부터
+    const inv = m.inv, left = k => (inv[k] || 0) - S.comps.filter(c => c.kind === k).length;
+    const missing = ORDER.filter(k => left(k) > 0 && !S.comps.some(c => c.kind === k));
+    const anyMat = S.comps.some(c => KINDS[c.kind].cat === 'material');
+    const needFirst = missing.find(k => KINDS[k].cat !== 'material') || (!anyMat && missing.find(k => KINDS[k].cat === 'material'));
+    if (needFirst) return { type: 'palette', kind: needFirst };
+
+    const acts = candidateActions();
+    let best = null;
+    const consider = (first, score, steps) => {
+      const v = score - steps * 3 - first.cost;
+      if (score > now && (!best || v > best.v)) best = { act: first, v, score, steps };
+    };
+    for (const a of acts) {
+      const st1 = applyAct(base, a);
+      const r1 = simState(st1.comps, st1.wires, clone());
+      consider(a, r1.score, 1);
+      if (r1.ok) continue;
+      if (acts.length > 45 || r1.short) continue;   // 너무 많으면 두 걸음 앞은 생략
+      for (const b of acts) {
+        if (b === a || (b.type === 'unwire' && a.type === 'unwire' && b.id === a.id)) continue;
+        const st2 = applyAct(st1, b);
+        const r2 = simState(st2.comps, st2.wires, clone());
+        if (r2.score > now) consider(a, r2.score - 1, 2);
+      }
+    }
+    const shortNow = S.an && S.an.status === 'short';
+    if (best && (best.act.type !== 'unwire' || best.score >= 1000 || shortNow)) return best.act;
+
+    // 2) 지금 재료로 안 되면, 남은 재료를 꺼내요
+    const k = ORDER.find(k => left(k) > 0);
+    if (k) return { type: 'palette', kind: k };
+    return best ? best.act : null;
+  }
+
+  /* ---------- 손가락 안내 그리기 ---------- */
+  let guideTimer = null;
+  function clearGuide() {
+    L.guide.innerHTML = '';
+    document.querySelectorAll('.pal-item.guide').forEach(el => el.classList.remove('guide'));
+    clearTimeout(guideTimer);
+  }
+  function showGuide(g) {
+    clearGuide();
+    let html = '', say = '';
+    const hand = (path, dur) => `<text class="guide-hand" font-size="46">👆<animateMotion dur="${dur}s" repeatCount="indefinite" path="${path}"/></text>`;
+    if (g.type === 'wire') {
+      const ca = getComp(g.a.c), cb = getComp(g.b.c);
+      const pa = termPos(ca, g.a.t), pb = termPos(cb, g.b.t);
+      const d = bez(pa, pa.n, pb, pb.n).d;
+      html += `<path class="guide-line" d="${d}"/>`;
+      html += `<circle class="guide-ring" cx="${pa.x}" cy="${pa.y}" r="20"/><circle class="guide-ring b" cx="${pb.x}" cy="${pb.y}" r="20"/>`;
+      html += `<text class="guide-num" x="${pa.x}" y="${pa.y - 30}">①</text><text class="guide-num" x="${pb.x}" y="${pb.y - 30}">②</text>`;
+      html += `<g transform="translate(-14 40)">${hand(d, 2.2)}</g>`;
+      say = `반짝이는 ① ${eul(termName(ca, g.a.t))} 꾹 누르고, ② ${termName(cb, g.b.t)}까지 쭉~ 끌어요!`;
+    } else if (g.type === 'toggle' || g.type === 'fix') {
+      const c = getComp(g.id);
+      html += `<circle class="guide-ring" cx="${c.x}" cy="${c.y}" r="46"/>`;
+      html += `<g transform="translate(${c.x - 14} ${c.y + 46})"><text class="guide-hand tap" font-size="46">👆</text></g>`;
+      say = g.type === 'fix' ? `반짝이는 ${eul(C.displayName(c))} 콕 눌러서 새 전구로 바꿔요!` : `반짝이는 ${eul(C.displayName(c))} 콕 눌러 봐요! (지금은 ${c.open ? '꺼짐' : '켜짐'})`;
+    } else if (g.type === 'unwire') {
+      const w = S.wires.find(x => x.id === g.id), geo = w && wireGeom(w);
+      if (geo) {
+        html += `<circle class="guide-ring" cx="${geo.mid.x}" cy="${geo.mid.y}" r="30"/>`;
+        html += `<g transform="translate(${geo.mid.x - 14} ${geo.mid.y + 34})"><text class="guide-hand tap" font-size="46">👆</text></g>`;
+      }
+      say = S.an && S.an.status === 'short' ? '앗 뜨거워요! 반짝이는 전선을 콕 누르고, 빨간 ✖를 눌러서 지워요.' : '반짝이는 전선을 콕 누르고, 빨간 ✖를 눌러서 지워 봐요.';
+    } else if (g.type === 'palette') {
+      const el = document.querySelector(`.pal-item[data-kind="${g.kind}"]`);
+      if (el) { el.classList.add('guide'); el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+      html += `<g transform="translate(-14 40)">${hand('M60 320 L420 320', 1.8)}</g>`;
+      say = `왼쪽 재료 상자에서 반짝이는 ${eul(KINDS[g.kind].name)} 꾹 잡고, 판 위로 쭉~ 끌어와요!`;
+    }
+    L.guide.innerHTML = html;
+    guideTimer = setTimeout(clearGuide, 15000);
+    return say;
+  }
+
   function giveHint() {
     S.nudge = false; lastNudge = performance.now(); lastAct = performance.now();
     S.hintCount = (S.hintCount || 0) + 1;
-    S.hintShown = smartHint();
+    let plan = null;
+    try { if (mission().check) plan = planGuide(); } catch (e) { plan = null; }
+    S.hintShown = plan ? '👆 ' + showGuide(plan) : smartHint();
     const b = $('#btn-hint'); if (b) b.classList.remove('nudge');
     const box = $('#hint-box');
     box.innerHTML = S.hintShown; box.classList.remove('hidden');
@@ -893,8 +1071,13 @@
     S.litCount = 0; S.wasShort = false; S.colorIdx = 0;
     S.nudge = false; S.hintShown = ''; S.hintCount = 0; S.wasFlowing = false; wave = null; S.lastKeys = null; S.levelStart = performance.now(); lastAct = performance.now(); lastNudge = 0;
     const m = mission();
-    const made = ((m.preset && m.preset.comps) || []).map(p => addComp(p.kind, p.x, p.y, { rot: p.rot || 0 }));
+    const made = ((m.preset && m.preset.comps) || []).map(p => {
+      const ex = { rot: p.rot || 0 };
+      if (p.open != null) ex.open = p.open;
+      return addComp(p.kind, p.x, p.y, ex);
+    });
     for (const w of (m.preset && m.preset.wires) || []) addWire({ c: made[w[0]].id, t: w[1] }, { c: made[w[2]].id, t: w[3] });
+    S.ghost = (m.ghost || []).map(w => ({ a: { c: made[w[0]].id, t: w[1] }, b: { c: made[w[2]].id, t: w[3] } }));
     renderPalette();
     recompute();
     speak(m.story);
