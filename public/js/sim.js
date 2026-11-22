@@ -133,7 +133,8 @@
     for (let i = 0; i < n; i++) G[i][i] += PHYS.G_LEAK;
 
     const V = n ? gauss(G, B) : [];
-    const res = { comp: {}, wire: {} };
+    const res = { comp: {}, wire: {}, node: {} };
+    for (const [k, i] of idx) res.node[k] = V[i];
     for (const c of comps) {
       const v0 = V[idx.get(c.id + ':0')], v1 = V[idx.get(c.id + ':1')];
       if (c.kind === 'battery') {
@@ -148,6 +149,24 @@
       res.wire[w.id] = (a == null || b == null) ? 0 : (V[a] - V[b]) / PHYS.R_WIRE;
     }
     return res;
+  }
+
+  /** 부품 c 가 들어 있는 회로에서 전지들이 밀어 주는 전체 전압 (V)
+   *  전류가 흐르는 부품들의 단자 전위 중 (가장 높은 값 − 가장 낮은 값).
+   *  전지 2개 직렬 = 3V, 병렬 = 1.5V, 거꾸로 = 0V. 매달려만 있는 전지는 전류가 없어서 빼요. */
+  function supplyV(comps, wires, sol, c) {
+    const parent = {};
+    const find = k => { if (parent[k] == null) parent[k] = k; while (parent[k] !== k) { parent[k] = parent[parent[k]]; k = parent[k]; } return k; };
+    const union = (a, b) => { a = find(a); b = find(b); if (a !== b) parent[a] = b; };
+    for (const w of wires) union(w.a.c + ':' + w.a.t, w.b.c + ':' + w.b.t);
+    for (const x of comps) if (x.kind === 'battery' || isFinite(resistanceOf(x))) union(x.id + ':0', x.id + ':1');
+    const root = find(c.id + ':0');
+    let hi = -Infinity, lo = Infinity;
+    for (const x of comps) {
+      if (find(x.id + ':0') !== root || Math.abs(sol.comp[x.id].I) < 0.05) continue;
+      for (const t of [0, 1]) { const v = sol.node[x.id + ':' + t]; if (v > hi) hi = v; if (v < lo) lo = v; }
+    }
+    return hi > lo ? hi - lo : 0;
   }
 
   /** 이 부품이 전기가 통한다면 전류가 흐를 자리에 있는지 (물건 시험, 스위치 확인용) */
@@ -306,5 +325,5 @@
     return { status: 'ok', ok, bank, lg, steps, summary, list, kidEq, maxI };
   }
 
-  global.Circuit = { PHYS, KINDS, CIRCLED, fmt, displayName, resistanceOf, isLoad, solve, analyze, wouldConduct };
+  global.Circuit = { PHYS, KINDS, CIRCLED, fmt, displayName, resistanceOf, isLoad, solve, analyze, wouldConduct, supplyV };
 })(window);

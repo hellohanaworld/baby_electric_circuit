@@ -171,6 +171,10 @@
     else story = `전선이 ${removed.length}개 빠졌어요! 반짝이는 점끼리 이어 주세요. ${w.act}`;
 
     const map = {}; keep.forEach((ci, j) => { map[ci] = j; });
+    const design = comps.reduce((o, c) => {
+      const k = w.mats && w.mats.includes(c.kind) ? 'MAT' : c.kind;
+      o[k] = (o[k] || 0) + 1; return o;
+    }, {});
     return Object.assign({}, base, {
       world: wi, stage: si, label: `${wi + 1}-${si + 1}`, story, inv,
       preset: {
@@ -180,10 +184,8 @@
       ghost: sch.ghost && keep.length === n ? removed.map(([a, ta, b, tb]) => [map[a], ta, map[b], tb]) : [],
       guided: si < 5,    // 아직 안 이은 점을 반짝이게
       // 재료 상자에서 꺼내야 하는 스테이지(X-7, X-8): 꺼낼 재료를 반짝반짝
-      want: hidden.length && keep.length ? comps.reduce((o, c) => {
-        const k = w.mats && w.mats.includes(c.kind) ? 'MAT' : c.kind;
-        o[k] = (o[k] || 0) + 1; return o;
-      }, {}) : null
+      want: hidden.length && keep.length ? design : null,
+      design       // 이 주제의 회로에 꼭 필요한 재료 (도와줘가 엉뚱한 재료를 권하지 않게)
     });
   }
 

@@ -92,7 +92,8 @@
       goal: '전구를 아주 밝게 켜기',
       inv: { battery: 2, bulb: 1 },
       hint: '전지의 ＋를 다른 전지의 −에 이어요. 기차처럼 칙칙폭폭!',
-      check: ctx => ctx.lit().some(b => ctx.A(b) >= 0.95),
+      // 전지 2개가 줄줄이(직렬) 이어져서 3V로 밀어 주는 회로에 불이 켜지면 성공 (남은 재료는 안 써도 돼요)
+      check: ctx => ctx.lit().some(b => ctx.push(b) >= 2.9),
       learn: '전지 2개가 <b>같이 밀어서</b> 전기가 2배로 세졌어요!<div class="pic">🔋🔋 ➡️ 🌟💡🌟</div>',
       say: '성공! 전지 두 개가 같이 미니까 전구가 더 밝아졌어요.',
       parent: `<p><b>핵심 개념: 전지의 직렬연결</b><br>(＋)극과 (−)극을 이어 붙이면 전압이 더해집니다. 1.5V + 1.5V = 3V</p>
@@ -151,7 +152,8 @@
       goal: '선풍기 가장 빠르게',
       inv: { battery: 3, motor: 1, switch: 1 },
       hint: '전지 3개를 기차처럼 이어요. 1개, 2개, 3개로 바꿔 보면서 빠르기를 봐요!',
-      check: ctx => ctx.of('motor').some(m => ctx.A(m) >= 1.4),
+      // 전지 3개가 줄줄이(직렬) 4.5V로 밀어서 선풍기가 돌면 성공
+      check: ctx => ctx.of('motor').some(m => ctx.A(m) > 0.1 && ctx.push(m) >= 4.4),
       learn: '전지가 많을수록 <b>미는 힘이 세져서</b> 쌩쌩 돌아요!<div class="pic">🔋 → 🌀<br>🔋🔋 → 🌀🌀<br>🔋🔋🔋 → 🌀🌀🌀</div>',
       say: '성공! 전지가 많을수록 선풍기가 빨라져요.',
       parent: `<p><b>핵심 개념: 옴의 법칙 (전압 ∝ 전류)</b></p>

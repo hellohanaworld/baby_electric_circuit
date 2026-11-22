@@ -295,6 +295,7 @@
       if (sel) uHtml += btn(g.mid.x, g.mid.y, '✖', 'delwire', '#fa5252');
     }
 
+    const waitPal = ORDER.some(paletteNeeds);   // 먼저 재료 상자에서 꺼내야 하면 점은 가만히
     for (const c of S.comps) {
       const o = compInfo(c);
       const sel = S.sel === c.id;
@@ -308,7 +309,7 @@
       lHtml += labelSVG(c, o);
       for (const t of [0, 1]) {
         const p = termPos(c, t), on = connected.has(c.id + ':' + t);
-        const pulse = !S.wires.length || (mission().guided && !on);
+        const pulse = !waitPal && (!S.wires.length || (mission().guided && !on));
         tHtml += `<circle class="term${on ? ' on' : ''}${pulse ? ' pulse' : ''}" data-term="${c.id}:${t}" cx="${p.x}" cy="${p.y}" r="11"/>`;
         if (c.kind === 'battery') {
           tHtml += `<text class="term-pol${t ? ' plus' : ''}" x="${p.x}" y="${p.y + 5}">${t ? '+' : '−'}</text>`;
@@ -366,6 +367,7 @@
       lit: () => S.comps.filter(c => c.kind === 'bulb' && !c.broken && Math.abs(sol.comp[c.id].I) > PHYS.LIT_A),
       name: c => C.displayName(c),
       wouldConduct: c => C.wouldConduct(S.comps, S.wires, c),
+      push: c => C.supplyV(S.comps, S.wires, sol, c),
       toast
     };
   }
@@ -400,18 +402,28 @@
         S.succeeded = true; S.nudge = false; S.hintShown = '';
         if (!progress.done.includes(S.level)) progress.done.push(S.level);
         save();
-        if (flowing) { waveDur = 4; afterWave = () => setTimeout(showSuccess, 1600); }
-        else setTimeout(showSuccess, 900);
+        // 성공 화면은 흐름 애니메이션이 중간에 끊겨도 꼭 나와요
+        const tok = {}; S.successTok = tok;
+        const fire = () => { if (S.successTok !== tok) return; S.successTok = null; showSuccess(); };
+        if (flowing) { waveDur = 4; afterWave = () => setTimeout(fire, 1600); setTimeout(fire, 4000 + 1600 + 900); }
+        else setTimeout(fire, 900);
       }
     }
     if (!waveDur && flowing && !S.wasFlowing) waveDur = 2.6;   // 새로 이어졌을 때
     S.wasFlowing = flowing;
     if (!waveDur && lit > S.litCount) sfx.light();
     S.litCount = lit;
-    if (!flowing) { wave = null; L.wave.innerHTML = ''; }
+    if (!flowing) {
+      wave = null; L.wave.innerHTML = '';
+      if (S.successTok) { const tok = S.successTok; setTimeout(() => { if (S.successTok === tok) { S.successTok = null; showSuccess(); } }, 300); }
+    }
     renderBoard(); renderNote(); renderBars(); renderMission();
     if (waveDur) startWave(waveDur, afterWave);
     S.lastKeys = null;
+    if (S.chain > 0 && !S.succeeded && mission().check) {
+      const left = S.chain - 1; S.chain = 0; clearTimeout(autoT);
+      autoT = setTimeout(() => { if (!S.succeeded && !drag && !anyModalOpen()) { giveHint(); S.chain = Math.min(S.chain, left); } }, 1200 + waveDur * 1000);
+    } else scheduleAutoHint(waveDur * 1000);
   }
 
   /* ---------- 오른쪽 패널 ---------- */
@@ -438,7 +450,9 @@
       </div>
       <div class="m-hint${S.hintShown ? '' : ' hidden'}" id="hint-box">${S.hintShown || ''}</div>`;
     $('#btn-say').onclick = () => speak(m.story);
-    $('#btn-hint').onclick = giveHint;
+    $('#btn-hint').onclick = () => giveHint();
+    $('#fab-hint').classList.toggle('nudge', !!S.nudge);
+    $('#fab-hint').classList.toggle('hidden', mission().check === null);
     $('#btn-m-info').onclick = () => openParent(stageName(m), m.parent);
     const n2 = $('#btn-next2'); if (n2) n2.onclick = () => loadLevel(S.level + 1);
     $('#level-title').textContent = stageName(m);
@@ -515,19 +529,20 @@
 
   /* ---------- 팔레트 (재료함) ---------- */
   function countOnBoard(kind) { return S.comps.filter(c => c.kind === kind).length; }
+  // 재료 상자에서 아직 꺼내야 할 재료가 있는지 (X-7, X-8)
+  function paletteNeeds(k) {
+    const m = mission(), want = m.want;
+    if (!want || (m.inv[k] || 0) - countOnBoard(k) <= 0) return false;
+    const isMat = x => KINDS[x].cat === 'material';
+    if (isMat(k)) return !!want.MAT && !S.comps.some(c => isMat(c.kind));
+    return (want[k] || 0) > countOnBoard(k);
+  }
   function renderPalette() {
-    const inv = mission().inv, want = mission().want;
+    const inv = mission().inv;
     const kinds = ORDER.filter(k => inv[k]);
-    const isMat = k => KINDS[k].cat === 'material';
-    // 아직 꺼내야 하는 재료 (물건 고르기 주제는 어떤 물건이든 하나 꺼내면 돼요)
-    const needs = k => {
-      if (!want) return false;
-      if (isMat(k)) return !!want.MAT && !S.comps.some(c => isMat(c.kind));
-      return (want[k] || 0) > countOnBoard(k);
-    };
     $('#pal-items').innerHTML = kinds.map(k => {
       const left = inv[k] - countOnBoard(k);
-      const sparkle = left > 0 && needs(k);
+      const sparkle = paletteNeeds(k);
       const fake = { id: 0, kind: k, rot: 0, open: k === 'switch', num: 1 };
       return `<div class="pal-item${left <= 0 ? ' empty' : ''}${sparkle ? ' want' : ''}" data-kind="${k}">${sparkle ? '<span class="sparkle s1">✨</span><span class="sparkle s2">✨</span>' : ''}
         <svg viewBox="-66 -96 132 118" class="pal-svg">${compInner(fake, { b: 0 })}</svg>
@@ -585,6 +600,7 @@
 
   svg.addEventListener('pointerdown', e => {
     audio();
+    if (S.successTok) return;   // 성공 축하 중에는 판을 눌러도 회로가 안 망가져요
     const act = e.target.closest('[data-action]');
     if (act) { e.preventDefault(); doAction(act.dataset.action); return; }
     const term = e.target.closest('[data-term]');
@@ -880,15 +896,16 @@
   const IDLE_MS = 20000;      // 20초 동안 아무것도 안 하면
   const LONG_MS = 90000;      // 이것저것 해도 1분 30초 넘게 못 풀면
   const GAP_MS = 45000;       // 알려주는 간격
-  window.addEventListener('pointerdown', e => { lastAct = performance.now(); if (!e.target.closest('#btn-hint')) clearGuide(); }, true);
+  window.addEventListener('pointerdown', e => { lastAct = performance.now(); if (!e.target.closest('#btn-hint, #fab-hint')) clearGuide(); }, true);
 
   function anyModalOpen() { return [...document.querySelectorAll('.modal')].some(m => !m.classList.contains('hidden')); }
 
   function nudge() {
     S.nudge = true; lastNudge = performance.now();
     const b = $('#btn-hint'); if (b) b.classList.add('nudge');
-    toast('막혔나요? 반짝이는 💡도와줘 버튼을 눌러 봐요! 👉', 6000);
-    speak('막혔나요? 반짝반짝 빛나는 도와줘 버튼을 눌러 봐요!', true);
+    $('#fab-hint').classList.add('nudge');
+    toast('막혔나요? 오른쪽 아래 노란 💡도와줘 버튼을 눌러 봐요! 👉', 6000);
+    speak('막혔나요? 오른쪽 아래에 반짝반짝 빛나는 노란 도와줘 버튼을 눌러 봐요!', true);
   }
 
   setInterval(() => {
@@ -898,6 +915,28 @@
     if (now - lastNudge < GAP_MS) return;
     if (now - lastAct > IDLE_MS || now - (S.levelStart || now) > LONG_MS * (1 + (S.hintCount || 0))) nudge();
   }, 2000);
+
+  /* 다 만든 것 같은데 성공이 아니면: 5초 기다렸다가 무엇을 할지 손가락과 목소리로 알려줘요 */
+  const AUTO_MS = 5000;
+  let autoT = 0;
+  function scheduleAutoHint(extra) {
+    clearTimeout(autoT);
+    const m = mission(), an = S.an;
+    if (!m.check || S.succeeded || !S.comps.length || !an || an.status === 'short') return;
+    const flowing = an.status === 'ok';
+    const used = new Set(); for (const w of S.wires) { used.add(w.a.c + ':' + w.a.t); used.add(w.b.c + ':' + w.b.t); }
+    const allWired = S.comps.every(c => used.has(c.id + ':0') && used.has(c.id + ':1'));
+    if (!flowing && !allWired) return;
+    autoT = setTimeout(function fire() {
+      if (S.succeeded || mission() !== m) return;
+      if (drag || anyModalOpen()) { autoT = setTimeout(fire, 1500); return; }
+      const now = S.an;
+      const why = now && now.status === 'ok'
+        ? (S.litCount ? '불은 켜졌는데 아직 미션 성공이 아니에요!' : '전기는 흐르는데 아직 미션 성공이 아니에요!')
+        : '전선은 다 이었는데 전기가 안 흘러요!';
+      giveHint('🤔 ' + why);
+    }, AUTO_MS + (extra || 0));
+  }
 
   /** 지금 판 상태를 보고 알맞은 힌트 고르기 */
   function smartHint() {
@@ -919,6 +958,7 @@
       of: k => comps.filter(c => c.kind === k),
       lit: () => comps.filter(c => c.kind === 'bulb' && !c.broken && Math.abs(sol.comp[c.id].I) > PHYS.LIT_A),
       name: c => C.displayName(c),
+      push: c => C.supplyV(comps, wires, sol, c),
       wouldConduct: c => C.wouldConduct(comps, wires, c),
       toast: () => { }
     };
@@ -962,6 +1002,7 @@
     for (const c of S.comps) if (c.kind === 'switch') acts.push({ type: 'toggle', id: c.id, cost: 0.2 });
     for (const c of S.comps) if (c.kind === 'bulb' && c.broken) acts.push({ type: 'fix', id: c.id, cost: 0 });
     for (const w of S.wires) acts.push({ type: 'unwire', id: w.id, cost: 0.5 });
+    for (const c of S.comps) acts.push({ type: 'remove', id: c.id, cost: 0.6 });
     return acts;
   }
 
@@ -971,7 +1012,41 @@
     if (act.type === 'unwire') wires = wires.filter(w => w.id !== act.id);
     if (act.type === 'toggle') comps = comps.map(c => c.id === act.id ? Object.assign({}, c, { open: !c.open }) : c);
     if (act.type === 'fix') comps = comps.map(c => c.id === act.id ? Object.assign({}, c, { broken: false }) : c);
+    if (act.type === 'remove') { comps = comps.filter(c => c.id !== act.id); wires = wires.filter(w => w.a.c !== act.id && w.b.c !== act.id); }
     return { comps, wires };
+  }
+
+  /** 잘못 들어간 재료 찾기: 전기가 안 통하는 물건, 설계보다 많은 재료, 거꾸로 이은 전지 */
+  function wrongPart() {
+    const m = mission(), design = m.design;
+    const wired = c => S.wires.some(w => w.a.c === c.id || w.b.c === c.id);
+    // 전기가 안 통하는 물건이 길을 막고 있어요
+    for (const c of S.comps) {
+      const k = KINDS[c.kind];
+      if (k.cat === 'material' && !k.conductor && wired(c) && C.wouldConduct(S.comps, S.wires, c)) return { c, why: 'insulator' };
+    }
+    // 설계에 없는(또는 더 많은) 재료
+    if (design) {
+      const count = {};
+      for (const c of S.comps) {
+        const k = KINDS[c.kind];
+        const key = k.cat === 'material' ? (k.conductor && design.MAT ? 'MAT' : '-') : c.kind;
+        count[key] = (count[key] || 0) + 1;
+        if (count[key] > (design[key] || 0) && wired(c)) return { c, why: 'extra' };
+      }
+    }
+    // 거꾸로 이은 전지: 그 전지만 뒤집어 보면 회로가 좋아지는지 미리 계산해 봐요
+    const bats = S.comps.filter(c => c.kind === 'battery' && wired(c));
+    if (bats.length >= 2) {
+      const memo = () => JSON.parse(JSON.stringify(S.memo || {}));
+      const now = simState(S.comps, S.wires, memo()).score;
+      for (const b of bats.slice().reverse()) {
+        const fl = t => ({ c: t.c, t: t.c === b.id ? 1 - t.t : t.t });
+        const ws = S.wires.map(w => ({ id: w.id, a: fl(w.a), b: fl(w.b) }));
+        if (simState(S.comps, ws, memo()).score > now) return { c: b, why: 'reversed' };
+      }
+    }
+    return null;
   }
 
   function planGuide() {
@@ -982,8 +1057,16 @@
 
     // 1) 재료가 아예 부족하면 재료 상자부터
     const inv = m.inv, left = k => (inv[k] || 0) - S.comps.filter(c => c.kind === k).length;
-    const missing = ORDER.filter(k => left(k) > 0 && !S.comps.some(c => c.kind === k));
     const anyMat = S.comps.some(c => KINDS[c.kind].cat === 'material');
+    // 설계에 꼭 필요한데 아직 모자란 재료 (설계 정보가 없는 자유 실험실은 예전 방식)
+    const design = m.design;
+    const needs = k => {
+      if (left(k) <= 0) return false;
+      if (!design) return true;
+      if (KINDS[k].cat === 'material') return !!design.MAT && !anyMat && KINDS[k].conductor;
+      return (design[k] || 0) > S.comps.filter(c => c.kind === k).length;
+    };
+    const missing = ORDER.filter(k => needs(k) && !S.comps.some(c => c.kind === k));
     const needFirst = missing.find(k => KINDS[k].cat !== 'material') || (!anyMat && missing.find(k => KINDS[k].cat === 'material'));
     if (needFirst) return { type: 'palette', kind: needFirst };
 
@@ -1000,25 +1083,52 @@
       if (r1.ok) continue;
       if (acts.length > 45 || r1.short) continue;   // 너무 많으면 두 걸음 앞은 생략
       for (const b of acts) {
-        if (b === a || (b.type === 'unwire' && a.type === 'unwire' && b.id === a.id)) continue;
+        if (b === a || (b.type === a.type && b.id != null && b.id === a.id)) continue;
+        if (b.type === 'wire' && a.type === 'remove' && (b.a.c === a.id || b.b.c === a.id)) continue;
         const st2 = applyAct(st1, b);
         const r2 = simState(st2.comps, st2.wires, clone());
         if (r2.score > now) consider(a, r2.score - 1, 2);
       }
     }
     const shortNow = S.an && S.an.status === 'short';
-    if (best && (best.act.type !== 'unwire' || best.score >= 1000 || shortNow)) return best.act;
+    const bad = wrongPart();
+    // 잘못 들어간 재료가 있으면 돌아가는 길보다 그것부터 고쳐요 (합선만 먼저)
+    if (bad && !shortNow) return { type: 'remove', id: bad.c.id, why: bad.why };
+    const fine = a => a.type === 'wire' || a.type === 'toggle' || a.type === 'fix' ||
+      best.score >= 1000 || shortNow || (a.type === 'remove' && bad && bad.c.id === a.id);
+    if (best && fine(best.act)) return withWhy(best.act, bad);
 
-    // 2) 지금 재료로 안 되면, 남은 재료를 꺼내요
-    const k = ORDER.find(k => left(k) > 0);
+    // 2) 잘못 들어간 재료가 있으면 그것부터 치워요
+    if (bad) return { type: 'remove', id: bad.c.id, why: bad.why };
+
+    // 3) 지금 재료로 안 되면, 남은 재료를 꺼내요
+    const k = ORDER.find(needs);
     if (k) return { type: 'palette', kind: k };
-    return best ? best.act : null;
+    return best ? withWhy(best.act, bad) : null;
+  }
+
+  function withWhy(act, bad) {
+    if (act.type === 'remove') return Object.assign({}, act, { why: bad && bad.c.id === act.id ? bad.why : 'extra' });
+    return act;
   }
 
   /* ---------- 손가락 안내 그리기 ---------- */
   let guideTimer = null;
+  // 판 밖(재료 상자)까지 손이 부품을 끌고 가는 모습
+  function flyHand(c) {
+    const r = svg.getScreenCTM(), pr = palette.getBoundingClientRect();
+    const el = document.createElement('div');
+    el.className = 'guide-fly';
+    el.innerHTML = '<span>✋</span>';
+    el.style.setProperty('--x0', (c.x * r.a + r.e) + 'px'); el.style.setProperty('--y0', (c.y * r.d + r.f) + 'px');
+    el.style.setProperty('--x1', (pr.left + pr.width / 2) + 'px'); el.style.setProperty('--y1', (pr.top + pr.height / 2) + 'px');
+    document.body.appendChild(el);
+    palette.classList.add('guide-drop');
+  }
   function clearGuide() {
     L.guide.innerHTML = '';
+    document.querySelectorAll('.guide-fly').forEach(el => el.remove());
+    palette.classList.remove('guide-drop');
     document.querySelectorAll('.pal-item.guide').forEach(el => el.classList.remove('guide'));
     clearTimeout(guideTimer);
   }
@@ -1043,10 +1153,24 @@
     } else if (g.type === 'unwire') {
       const w = S.wires.find(x => x.id === g.id), geo = w && wireGeom(w);
       if (geo) {
+        html += `<path class="guide-badwire" d="${geo.d}"/>`;
+        html += `<text class="guide-spark" x="${geo.mid.x - 40}" y="${geo.mid.y - 20}">✨</text><text class="guide-spark b" x="${geo.mid.x + 24}" y="${geo.mid.y - 26}">✨</text>`;
         html += `<circle class="guide-ring" cx="${geo.mid.x}" cy="${geo.mid.y}" r="30"/>`;
         html += `<g transform="translate(${geo.mid.x - 14} ${geo.mid.y + 34})"><text class="guide-hand tap" font-size="46">👆</text></g>`;
       }
       say = S.an && S.an.status === 'short' ? '앗 뜨거워요! 반짝이는 전선을 콕 눌러서 지워요.' : '반짝이는 전선을 콕 눌러서 지워 봐요.';
+    } else if (g.type === 'remove') {
+      const c = getComp(g.id), name = C.displayName(c);
+      html += `<circle class="guide-ring bad" cx="${c.x}" cy="${c.y}" r="58"/>`;
+      html += `<text class="guide-spark" x="${c.x - 62}" y="${c.y - 40}">✨</text><text class="guide-spark b" x="${c.x + 44}" y="${c.y - 46}">✨</text><text class="guide-spark" x="${c.x + 40}" y="${c.y + 58}">✨</text>`;
+      html += `<text class="guide-no" x="${c.x}" y="${c.y - 64}">${g.why === 'reversed' ? '🙃' : '🚫'}</text>`;
+      html += `<path class="guide-line" d="M${c.x - 60} ${c.y} L12 ${c.y}"/><text class="guide-num" x="40" y="${c.y - 18}">⬅</text>`;
+      flyHand(c);
+      const jong = w => { if (/[①-⑮]$/.test(w)) return true; /* ②는 '2번'으로 읽어요 */ const ch = w.charCodeAt(w.length - 1); return ch >= 0xac00 && ch <= 0xd7a3 && (ch - 0xac00) % 28 > 0; };
+      const what = g.why === 'insulator' ? `반짝이는 ${KINDS[c.kind].topic} 전기가 안 통해요!`
+        : g.why === 'reversed' ? `반짝이는 ${name}${jong(name) ? '이' : '가'} 거꾸로 이어졌어요!`
+        : `반짝이는 ${name}${jong(name) ? '은' : '는'} 지금 필요 없어요!`;
+      say = `${what} ${eul(name)} 꾹 잡고, 왼쪽 재료 상자로 쭉~ 끌어다 놓아요.` + (g.why === 'reversed' ? ' 그다음 다시 꺼내서 ＋는 −에 이어요.' : '');
     } else if (g.type === 'palette') {
       const el = document.querySelector(`.pal-item[data-kind="${g.kind}"]`);
       if (el) { el.classList.add('guide'); el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
@@ -1058,13 +1182,15 @@
     return say;
   }
 
-  function giveHint() {
+  function giveHint(why) {
     S.nudge = false; lastNudge = performance.now(); lastAct = performance.now();
     S.hintCount = (S.hintCount || 0) + 1;
     let plan = null;
     try { if (mission().check) plan = planGuide(); } catch (e) { plan = null; }
-    S.hintShown = plan ? '👆 ' + showGuide(plan) : smartHint();
+    S.hintShown = (typeof why === 'string' ? why + '<br>' : '') + (plan ? '👆 ' + showGuide(plan) : smartHint());
+    S.chain = plan ? 3 : 0;     // 아이가 따라 하면 다음 걸음도 이어서 알려줘요
     const b = $('#btn-hint'); if (b) b.classList.remove('nudge');
+    $('#fab-hint').classList.remove('nudge');
     const box = $('#hint-box');
     box.innerHTML = S.hintShown; box.classList.remove('hidden');
     box.classList.remove('flash'); void box.offsetWidth; box.classList.add('flash');
@@ -1078,7 +1204,7 @@
     progress.level = S.level; save();
     S.comps = []; S.wires = []; S.sel = null; S.selWire = null; S.memo = {}; S.succeeded = false;
     S.litCount = 0; S.wasShort = false; S.colorIdx = 0;
-    S.nudge = false; S.hintShown = ''; S.hintCount = 0; S.wasFlowing = false; wave = null; S.lastKeys = null; S.levelStart = performance.now(); lastAct = performance.now(); lastNudge = 0;
+    S.nudge = false; S.hintShown = ''; S.hintCount = 0; S.chain = 0; S.successTok = null; S.wasFlowing = false; wave = null; S.lastKeys = null; S.levelStart = performance.now(); lastAct = performance.now(); lastNudge = 0;
     const m = mission();
     const made = ((m.preset && m.preset.comps) || []).map(p => {
       const ex = { rot: p.rot || 0 };
@@ -1105,6 +1231,7 @@
   $('#btn-sound').onclick = () => { settings.sound = !settings.sound; save(); syncToggles(); };
   $('#btn-voice').onclick = () => { settings.voice = !settings.voice; save(); syncToggles(); if (!settings.voice && 'speechSynthesis' in window) speechSynthesis.cancel(); };
   $('#btn-reset').onclick = () => loadLevel(S.level);
+  $('#fab-hint').onclick = () => { audio(); giveHint(); };
   $('#btn-map').onclick = () => { renderMap(); openModal('#map'); };
   $('#btn-info').onclick = () => openModal('#info');
   $('#btn-unlock').onclick = () => { progress.unlockAll = true; save(); renderMap(); };
