@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>꼬마 전기 실험실</title>
+  <meta name="description" content="어린이를 위한 전기회로 실험 놀이 - 전지, 전구, 스위치를 이어서 전류를 눈으로 봐요">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=7">
+</head>
+<body>
+  <header class="top">
+    <div class="logo">⚡ 꼬마 전기 실험실</div>
+    <button id="btn-map" class="pill big-ico" title="미션 지도">🗺️ 미션</button>
+    <div class="level-title" id="level-title"></div>
+    <div class="spacer"></div>
+    <button id="btn-reset" class="pill big-ico" title="이 미션을 처음 상태로">🔄 다시</button>
+    <button id="btn-sound" class="pill toggle big-ico" title="효과음">🔔</button>
+    <button id="btn-voice" class="pill toggle big-ico" title="읽어주기">🗣️</button>
+    <button id="btn-info" class="info-i top-i" title="엄마 아빠 설명 · 설정">i</button>
+  </header>
+
+  <main>
+    <aside id="palette">
+      <h2>🧰 재료 상자</h2>
+      <div id="pal-items"></div>
+      <p class="pal-tip">👆 꾹 잡고<br>판으로 쭉~ 👉<br><br>🗑️ 다시 여기로 끌어오면<br>치워져요</p>
+    </aside>
+
+    <section id="board-wrap">
+      <div id="banner" class="banner hidden">🔥 앗, 뜨거워요! 진짜 전지로 하면 위험해요!</div>
+      <svg id="board" viewBox="0 0 1000 640" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+            <circle cx="10" cy="10" r="1.6" fill="#c5d9ea"/>
+          </pattern>
+          <radialGradient id="glow">
+            <stop offset="0%" stop-color="#fffbe0" stop-opacity="1"/>
+            <stop offset="35%" stop-color="#ffe066" stop-opacity="0.85"/>
+            <stop offset="100%" stop-color="#ffd43b" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <rect x="0" y="0" width="1000" height="640" rx="24" fill="#f8fbff"/>
+        <rect x="0" y="0" width="1000" height="640" rx="24" fill="url(#grid)"/>
+        <g id="l-wires"></g>
+        <g id="l-flow"></g>
+        <g id="l-comps"></g>
+        <g id="l-labels"></g>
+        <g id="l-terms"></g>
+        <path id="drag-wire" style="display:none"/>
+        <g id="l-wave"></g>
+        <g id="l-ui"></g>
+      </svg>
+      <div id="slowmo" class="slowmo hidden">🐢 아주아주 느리게 보여주는 중! 진짜는 눈 깜짝할 사이보다 훨씬 빨라요 ⚡</div>
+      <div id="toast"></div>
+    </section>
+
+    <aside id="side">
+      <div class="card mission" id="mission"></div>
+      <div class="card note"><button class="info-i" id="btn-note-info" title="엄마 아빠 설명">i</button><h3>🔍 전기 관찰</h3><div id="note"></div></div>
+      <div class="card bars"><h3>📊 누가 누가 셀까?</h3><div id="bars"></div></div>
+    </aside>
+  </main>
+
+  <!-- 시작 화면 -->
+  <div class="modal" id="start">
+    <div class="modal-box start-box">
+      <div class="start-art">🔋 ➰ 💡</div>
+      <h1>꼬마 전기 실험실</h1>
+      <p>전선을 이어서<br>전구에 불을 켜 볼까요? 💡</p>
+      <button class="pill go big" id="btn-start">▶ 시작하기</button>
+      <p class="small-note">🖱️ 마우스로 꾹 잡고 끌어요 · 🔊 소리를 켜 주세요<br>ⓘ 버튼은 엄마 아빠를 위한 설명이에요</p>
+    </div>
+  </div>
+
+  <!-- 성공 -->
+  <div class="modal hidden" id="success">
+    <div class="modal-box" id="success-body"></div>
+  </div>
+
+  <!-- 미션 지도 -->
+  <div class="modal hidden" id="map">
+    <div class="modal-box wide">
+      <h2>🗺️ 미션 지도</h2>
+      <p>미션을 하나 성공하면 다음 미션이 열려요!</p>
+      <div id="map-grid"></div>
+      <div class="m-btns center">
+        <button class="pill" data-close>닫기</button>
+        <button class="pill ghost-btn" id="btn-unlock" title="부모님용">🔓 모든 미션 열기 (어른용)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 엄마 아빠께 (설정 + 안내) -->
+  <div class="modal hidden" id="info">
+    <div class="modal-box wide info">
+      <h2>ⓘ 엄마 아빠께</h2>
+      <h3>⚙️ 설정</h3>
+      <div class="m-btns">
+        <button id="btn-numbers" class="pill toggle">🔢 숫자·수식 보이기</button>
+        <button id="btn-electron" class="pill toggle">🟡 점 = 전류 (＋→−)</button>
+      </div>
+      <p class="setting-note">알갱이 버튼: 파란 알갱이는 실제로 움직이는 '전자'(−→＋), 노란 알갱이는 교과서의 '전류 방향'(＋→−)입니다. 학교에서 전류 방향을 배울 때는 노란 알갱이로 바꿔 보여 주세요.</p>
+
+      <h3>📌 꼭 읽어 주세요 (안내 및 면책)</h3>
+      <ul>
+        <li>이 앱은 <b>유아의 흥미와 기초 개념</b>을 위한 교육용 시뮬레이션입니다. 실제 전기 제품·전기 공사·안전 판단에 사용할 수 없습니다.</li>
+        <li>숫자는 실제 물리 법칙(옴의 법칙, 키르히호프 법칙)으로 계산하지만, 이해하기 쉽도록 <b>값을 단순화</b>했습니다. 실제 실험 결과와 다를 수 있어요.
+          <ul>
+            <li>건전지는 항상 1.5V (실제로는 내부저항이 있고, 쓸수록 전압이 떨어짐)</li>
+            <li>꼬마전구·모터·저항은 모두 3Ω 고정 (실제 전구는 뜨거워지면 저항이 커짐), 연필심 6Ω, 전선 0Ω</li>
+            <li>꼬마전구는 1.2A가 넘으면 끊어지는 것으로 정함</li>
+            <li>모터는 저항처럼 계산 (실제 모터의 역기전력은 생략)</li>
+          </ul></li>
+        <li><b>🔵 알갱이 모델</b>: 전선 속 파란 알갱이는 전자입니다. 전자는 전선 속에 원래 가득 있고, 회로가 닫히면 이어진 곳에서 "밀림 파동"이 퍼지며 알갱이가 움직이기 시작해요. 실제 파동은 거의 빛의 속도라서 화면은 아주 느리게 보여주는 것이고, 실제 전자는 반대로 아주 느리게(초속 0.1mm 정도) 움직입니다. 알갱이 속도는 전류에 비례해요.</li>
+        <li>아이에게는 쉬운 말을 씁니다: <b>미는 힘</b> = 전압(V), <b>막는 힘</b> = 저항(Ω), <b>전기 세기</b> = 전류(A), <b>줄줄이</b> = 직렬, <b>나란히</b> = 병렬. 정확한 설명은 화면 곳곳의 <span class="info-i inline">i</span> 버튼에 있어요.</li>
+      </ul>
+
+      <h3>⚠️ 안전 이야기를 꼭 함께 해 주세요</h3>
+      <ul>
+        <li>벽 콘센트(220V)는 건전지(1.5V)보다 <b>약 150배</b> 센 전기입니다. 절대 만지거나 실험하면 안 된다고 알려 주세요.</li>
+        <li>건전지 ＋와 −를 전선으로 바로 이으면(합선) 뜨거워집니다. 화면에서 합선을 만들면 🔥 경고가 나옵니다.</li>
+        <li>실제 실험은 반드시 어른과 함께, 꼬마전구용 건전지로만 해 주세요. 동전형(리튬) 전지는 삼키면 매우 위험하니 아이 손에 닿지 않게 보관하세요.</li>
+      </ul>
+
+      <h3>🖱️ 조작법</h3>
+      <ul>
+        <li>재료 상자에서 끌어다 놓기(또는 클릭) → 판에 놓여요. 판의 재료를 재료 상자로 끌어오면 치워져요.</li>
+        <li>동그란 점에서 다른 점으로 끌기 → 전선 연결. 전선을 클릭하면 ✖ 버튼으로 지울 수 있어요.</li>
+        <li>재료를 클릭하면 🔄 돌리기 / 🗑️ 치우기 버튼이 나와요. 스위치는 클릭하면 켜지고 꺼져요. 고장 난 전구는 클릭하면 새것이 돼요. (키보드: R 돌리기, Delete 지우기)</li>
+      </ul>
+      <div class="m-btns center"><button class="pill go" data-close>닫기</button></div>
+    </div>
+  </div>
+
+  <!-- 엄마 아빠 설명 (미션별 / 계산) -->
+  <div class="modal hidden" id="parent">
+    <div class="modal-box wide info parent-box">
+      <h2 id="parent-title">ⓘ 엄마 아빠 설명</h2>
+      <div id="parent-body"></div>
+      <div class="m-btns center"><button class="pill go" id="parent-close">닫기</button></div>
+    </div>
+  </div>
+
+  <script src="js/sim.js?v=7"></script>
+  <script src="js/missions.js?v=7"></script>
+  <script src="js/app.js?v=7"></script>
+</body>
+</html>

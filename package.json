@@ -1,0 +1,13 @@
+{
+  "name": "kkoma-circuit-lab",
+  "version": "1.0.0",
+  "description": "어린이용 전기회로 실험 웹 게임",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}
