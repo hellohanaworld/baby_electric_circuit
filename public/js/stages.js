@@ -162,10 +162,10 @@
     let story;
     const hidden = comps.filter((_, i) => !keep.includes(i));
     if (!keep.length) story = base.story + (sch.extra ? ' 필요 없는 재료도 섞여 있어요. 잘 골라요!' : '');
-    else if (sch.keep && keep.length === 1) story = `${NAMES[comps[keep[0]].kind] || '재료'}만 있어요! 재료 상자에서 나머지를 꺼내서 만들어요. ${w.act}`;
+    else if (sch.keep && keep.length === 1) story = `${NAMES[comps[keep[0]].kind] || '재료'}만 있어요! 재료 상자에서 반짝이는 재료를 꺼내서 만들어요. ${w.act}`;
     else if (hidden.length) {
       const k = hidden[0].kind;
-      story = (w.mats ? '재료 상자에서 물건 하나를 골라서 꺼내요!' : `재료 상자에서 ${eul(NAMES[k] || '재료')} 꺼내요!`) + ` 그리고 전선으로 이어요. ${w.act}`;
+      story = (w.mats ? '재료 상자에서 반짝이는 물건 하나를 골라서 꺼내요!' : `재료 상자에서 반짝이는 ${eul(NAMES[k] || '재료')} 꺼내요!`) + ` 그리고 전선으로 이어요. ${w.act}`;
     } else if (!wires.length) story = `재료는 다 있어요! 전선으로 이어 볼까요? ${w.act}`;
     else if (removed.length === 1) story = `전선이 하나 빠졌어요! 반짝이는 점을 이어 주세요. ${w.act}`;
     else story = `전선이 ${removed.length}개 빠졌어요! 반짝이는 점끼리 이어 주세요. ${w.act}`;
@@ -178,7 +178,12 @@
         wires: wires.map(([a, ta, b, tb]) => [map[a], ta, map[b], tb])
       },
       ghost: sch.ghost && keep.length === n ? removed.map(([a, ta, b, tb]) => [map[a], ta, map[b], tb]) : [],
-      guided: si < 5     // 아직 안 이은 점을 반짝이게
+      guided: si < 5,    // 아직 안 이은 점을 반짝이게
+      // 재료 상자에서 꺼내야 하는 스테이지(X-7, X-8): 꺼낼 재료를 반짝반짝
+      want: hidden.length && keep.length ? comps.reduce((o, c) => {
+        const k = w.mats && w.mats.includes(c.kind) ? 'MAT' : c.kind;
+        o[k] = (o[k] || 0) + 1; return o;
+      }, {}) : null
     });
   }
 

@@ -516,12 +516,20 @@
   /* ---------- 팔레트 (재료함) ---------- */
   function countOnBoard(kind) { return S.comps.filter(c => c.kind === kind).length; }
   function renderPalette() {
-    const inv = mission().inv;
+    const inv = mission().inv, want = mission().want;
     const kinds = ORDER.filter(k => inv[k]);
+    const isMat = k => KINDS[k].cat === 'material';
+    // 아직 꺼내야 하는 재료 (물건 고르기 주제는 어떤 물건이든 하나 꺼내면 돼요)
+    const needs = k => {
+      if (!want) return false;
+      if (isMat(k)) return !!want.MAT && !S.comps.some(c => isMat(c.kind));
+      return (want[k] || 0) > countOnBoard(k);
+    };
     $('#pal-items').innerHTML = kinds.map(k => {
       const left = inv[k] - countOnBoard(k);
+      const sparkle = left > 0 && needs(k);
       const fake = { id: 0, kind: k, rot: 0, open: k === 'switch', num: 1 };
-      return `<div class="pal-item${left <= 0 ? ' empty' : ''}" data-kind="${k}">
+      return `<div class="pal-item${left <= 0 ? ' empty' : ''}${sparkle ? ' want' : ''}" data-kind="${k}">${sparkle ? '<span class="sparkle s1">✨</span><span class="sparkle s2">✨</span>' : ''}
         <svg viewBox="-66 -96 132 118" class="pal-svg">${compInner(fake, { b: 0 })}</svg>
         <div class="pal-name">${KINDS[k].name}</div><div class="pal-count">${left > 0 ? '×' + left : '다 썼어요'}</div></div>`;
     }).join('');
