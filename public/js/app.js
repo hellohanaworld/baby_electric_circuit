@@ -136,6 +136,24 @@
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const inRect = (e, el) => { const r = el.getBoundingClientRect(); return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom; };
 
+  /* ---------- 표준 회로 기호 (부품 속 작은 하얀 판) ----------
+   * 부품이 돌아가면 기호도 같이 돌아가서, 기호의 양 끝이 진짜 단자 쪽을 향해요 (회로도와 같은 모양). */
+  function symbol(kind, x, y, c) {
+    let g = '';
+    if (kind === 'battery')      // 전지: 긴 선 = ＋극, 짧고 굵은 선 = −극
+      g = `<rect x="-15" y="-8" width="30" height="16" rx="3" class="sym-bg"/>
+        <path d="M-12 0 H-3 M3 0 H12" class="sym-ln"/><path d="M-3 -4 V4" class="sym-ln" stroke-width="3.4"/><path d="M3 -7 V7" class="sym-ln"/>`;
+    if (kind === 'bulb')         // 전구: 동그라미 속 ×
+      g = `<circle r="9" class="sym-bg"/><circle r="6.5" class="sym-ln"/><path d="M-4.6 -4.6 L4.6 4.6 M4.6 -4.6 L-4.6 4.6" class="sym-ln"/>`;
+    if (kind === 'switch')       // 스위치: 열리면 날이 들려요
+      g = `<rect x="-17" y="-6" width="34" height="12" rx="3" class="sym-bg"/>
+        <path d="M-14 2 H-8 M8 2 H14" class="sym-ln"/><circle cx="-8" cy="2" r="1.8" class="sym-dot"/><circle cx="8" cy="2" r="1.8" class="sym-dot"/>
+        <path d="${c && c.open ? 'M-8 2 L6 -4' : 'M-8 2 L8 2'}" class="sym-ln"/>`;
+    if (kind === 'resistor')     // 저항: 네모 (KS·IEC 기호)
+      g = `<rect x="-17" y="-7" width="34" height="14" rx="3" class="sym-bg"/><path d="M-14 0 H-8 M8 0 H14" class="sym-ln"/><rect x="-8" y="-4" width="16" height="8" class="sym-ln"/>`;
+    return g ? `<g class="sym" transform="translate(${x} ${y})">${g}</g>` : '';
+  }
+
   /* ---------- 부품 그림 (가로 방향, 가운데가 0,0) ---------- */
   function compInner(c, o) {
     const k = c.kind;
@@ -150,7 +168,8 @@
         <path d="M8 -20.5 H-36 a8.5 8.5 0 0 0 -8.5 8.5 V12 a8.5 8.5 0 0 0 8.5 8.5 H8 Z" fill="${body}"/>
         <text x="-30" y="10" class="pol">−</text>
         <text x="25" y="10" class="pol">+</text>
-        <text x="-8" y="5" class="bat-v">1.5V</text>
+        ${symbol('battery', -10, -7)}
+        <text x="-10" y="17" class="bat-v">1.5V</text>
         ${o.short ? '<text x="0" y="-32" class="emo">🔥</text>' : ''}`;
     }
     if (k === 'bulb') {
@@ -179,6 +198,7 @@
         ${lit ? `<g data-light="${c.id}"><circle cx="0" cy="-48" r="24" fill="${glass}" stroke="#74a9c9" stroke-width="2.5"/>${fil}</g>` : ''}
         <rect x="-12" y="-27" width="24" height="18" rx="3" fill="#adb5bd" stroke="#495057" stroke-width="2"/>
         <path d="M-12 -21 H12 M-12 -15 H12" stroke="#495057" stroke-width="1.5"/>
+        ${symbol('bulb', -30, 2)}
         ${c.broken ? '<text x="26" y="-62" class="emo small">💥</text>' : ''}`;
     }
     if (k === 'motor') {
@@ -187,7 +207,8 @@
         <rect x="-46" y="-9" width="92" height="18" rx="8" fill="#b08968" stroke="#7f5539" stroke-width="2"/>
         <path d="M-40 0 L-16 -14 M40 0 L16 -14" stroke="#adb5bd" stroke-width="3"/>
         <rect x="-22" y="-46" width="44" height="38" rx="10" fill="#adb5bd" stroke="#495057" stroke-width="2.5"/>
-        <text x="0" y="-20" class="motor-m">M</text>
+        <circle cx="0" cy="-27" r="14" class="sym-bg"/><circle cx="0" cy="-27" r="11.5" class="sym-ln"/>
+        <text x="0" y="-21" class="motor-m">M</text>
         <line x1="0" y1="-46" x2="0" y2="-60" stroke="#495057" stroke-width="4"/>
         <g data-fan="${c.id}" transform="translate(0 -62)">
           <ellipse cx="0" cy="-15" rx="8" ry="16" fill="#74c0fc" stroke="#1971c2" stroke-width="2"/>
@@ -206,7 +227,8 @@
         <g transform="rotate(${ang} -28 -6)">
           <rect x="-30" y="-11" width="62" height="9" rx="4.5" fill="#dee2e6" stroke="#495057" stroke-width="2"/>
           <circle cx="36" cy="-6.5" r="8" fill="${c.open ? '#fa5252' : '#40c057'}" stroke="#495057" stroke-width="2"/>
-        </g>`;
+        </g>
+        ${symbol('switch', 0, 5, c)}`;
     }
     if (k === 'resistor') {
       return `
@@ -218,7 +240,8 @@
         <rect x="-8" y="-12" width="6" height="24" fill="#212529"/>
         <rect x="2" y="-12" width="6" height="24" fill="#d4a017"/>
         <rect x="14" y="-12" width="5" height="24" fill="#d4a017"/>
-        <text x="0" y="30" class="res-v">3Ω</text>`;
+        ${symbol('resistor', -16, 22)}
+        <text x="16" y="27" class="res-v">3Ω</text>`;
     }
     // 시험용 물건들
     let item = '', half = 30;
@@ -446,7 +469,7 @@
       <div class="m-btns">
         <button class="pill" id="btn-say">🔊 들려줘</button>
         <button class="pill${S.nudge ? ' nudge' : ''}" id="btn-hint">💡 도와줘</button>
-        ${S.succeeded && S.level < MISSIONS.length - 1 ? '<button class="pill go" id="btn-next2">다음 ▶</button>' : ''}
+        ${S.succeeded && S.level < MISSIONS.length - 1 ? '<button class="pill go shine" id="btn-next2">다음 ▶</button>' : ''}
       </div>
       <div class="m-hint${S.hintShown ? '' : ' hidden'}" id="hint-box">${S.hintShown || ''}</div>`;
     $('#btn-say').onclick = () => speak(m.story);
@@ -502,6 +525,7 @@
     h += `<h3>아이에게 쓰는 말 ↔ 실제 용어</h3>
       <ul><li><b>미는 힘</b> = 전압 (V, 볼트)</li><li><b>막는 힘</b> = 저항 (Ω, 옴)</li><li><b>전기 세기</b> = 전류 (A, 암페어) · 번개 ⚡ 1개 = 0.25A</li>
       <li><b>줄줄이(기차)</b> = 직렬 · <b>나란히(사다리)</b> = 병렬</li>
+      <li><b>🔣 부품 속 하얀 그림 = 회로도 기호</b>: 교과서 회로도에 쓰는 표준 기호입니다. 전지(긴 선이 ＋극, 짧고 굵은 선이 −극), 전구(동그라미 속 ×), 스위치(열리면 날이 들림), 전동기(동그라미 속 M), 저항(네모). 부품을 돌리면 기호도 같이 돌아 단자 방향과 맞습니다.</li>
       <li><b>🔵 알갱이 = 자유전자</b>: 금속 전선 속에는 움직일 수 있는 전자가 원래 가득 있습니다. 그래서 연결 전에도 알갱이가 보이고, 지우개·나무(부도체)에는 없습니다.</li>
       <li><b>⚡ 밀림 파동</b>: 회로가 닫히면 마지막으로 이어진 곳에서 전기적 '밀림'(전자기파)이 양쪽으로 퍼집니다. 실제 속도는 빛의 약 60~90%라서 1m 전선을 몇 나노초 만에 지나갑니다. 화면은 수십억 배 느리게 보여주는 것입니다.</li>
       <li><b>🐢 전자의 실제 속도</b>: 0.5A, 0.5mm² 구리선에서 전자의 평균 이동 속도는 초속 약 0.07mm입니다(v = I ÷ nqA). 그래도 불이 바로 켜지는 건 전자가 이미 꽉 차 있어 다 같이 움직이기 때문입니다. 화면의 알갱이는 보기 쉽게 훨씬 빠르게 그렸습니다.</li>
@@ -545,7 +569,7 @@
       const sparkle = paletteNeeds(k);
       const fake = { id: 0, kind: k, rot: 0, open: k === 'switch', num: 1 };
       return `<div class="pal-item${left <= 0 ? ' empty' : ''}${sparkle ? ' want' : ''}" data-kind="${k}">${sparkle ? '<span class="sparkle s1">✨</span><span class="sparkle s2">✨</span>' : ''}
-        <svg viewBox="-66 -96 132 118" class="pal-svg">${compInner(fake, { b: 0 })}</svg>
+        <svg viewBox="-66 -96 132 128" class="pal-svg">${compInner(fake, { b: 0 })}</svg>
         <div class="pal-name">${KINDS[k].name}</div><div class="pal-count">${left > 0 ? '×' + left : '다 썼어요'}</div></div>`;
     }).join('');
   }
@@ -840,13 +864,13 @@
       <div class="learn">${m.learn}</div>
       <div class="m-btns center">
         <button class="pill" data-close>🔬 더 놀래요</button>
-        ${hasNext ? '<button class="pill go big" id="btn-next">다음 ▶</button>' : '<button class="pill go big" data-close>🏆 다 했어요!</button>'}
+        ${hasNext ? '<button class="pill go big shine" id="btn-next">다음 ▶</button>' : '<button class="pill go big" data-close>🏆 다 했어요!</button>'}
       </div>`;
     $('#btn-s-info').onclick = () => openParent(stageName(m), m.parent);
     $('#success-body').querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeModals));
     const nb = $('#btn-next'); if (nb) nb.onclick = () => { closeModals(); loadLevel(S.level + 1); };
     openModal('#success');
-    speak(worldDone ? `우와! ${m.title} 열 개를 다 깼어요! ` + (m.say || '') : (m.say || '성공!'));
+    speak((worldDone ? `우와! ${m.title} 열 개를 다 깼어요! ` + (m.say || '') : (m.say || '성공!')) + (hasNext ? ' 반짝이는 다음 버튼을 눌러요!' : ''));
     renderMission();
   }
 
@@ -1129,8 +1153,16 @@
     L.guide.innerHTML = '';
     document.querySelectorAll('.guide-fly').forEach(el => el.remove());
     palette.classList.remove('guide-drop');
-    document.querySelectorAll('.pal-item.guide').forEach(el => el.classList.remove('guide'));
+    document.querySelectorAll('.pal-item.guide, .pal-item.dim').forEach(el => el.classList.remove('guide', 'dim'));
     clearTimeout(guideTimer);
+  }
+  // 눌러야 할 바로 그 자리에서 번쩍번쩍 (퍼지는 고리 + 반짝이는 별)
+  function burst(x, y, delay = 0, big = false) {
+    const r0 = big ? 30 : 14, r1 = big ? 78 : 50;
+    const ring = d => `<circle class="burst-ring" r="${r0}"><animate attributeName="r" values="${r0};${r1}" dur="1s" begin="${d}s" repeatCount="indefinite"/><animate attributeName="opacity" values="1;0" dur="1s" begin="${d}s" repeatCount="indefinite"/></circle>`;
+    return `<g class="burst" transform="translate(${x} ${y})" style="animation-delay:${delay}s">${ring(delay)}${ring(delay + 0.5)}
+      ${big ? '' : `<circle class="burst-core" r="17" style="animation-delay:${delay}s"/>`}
+      <text class="burst-star" x="${big ? 40 : 18}" y="${big ? -34 : -16}" style="animation-delay:${delay}s">✨</text></g>`;
   }
   function showGuide(g) {
     clearGuide();
@@ -1141,13 +1173,13 @@
       const pa = termPos(ca, g.a.t), pb = termPos(cb, g.b.t);
       const d = bez(pa, pa.n, pb, pb.n).d;
       html += `<path class="guide-line" d="${d}"/>`;
-      html += `<circle class="guide-ring" cx="${pa.x}" cy="${pa.y}" r="20"/><circle class="guide-ring b" cx="${pb.x}" cy="${pb.y}" r="20"/>`;
+      html += burst(pa.x, pa.y, 0) + burst(pb.x, pb.y, 0.8);
       html += `<text class="guide-num" x="${pa.x}" y="${pa.y - 30}">①</text><text class="guide-num" x="${pb.x}" y="${pb.y - 30}">②</text>`;
       html += `<g transform="translate(-14 40)">${hand(d, 2.2)}</g>`;
       say = `반짝이는 ① ${eul(termName(ca, g.a.t))} 꾹 누르고, ② ${termName(cb, g.b.t)}까지 쭉~ 끌어요!`;
     } else if (g.type === 'toggle' || g.type === 'fix') {
       const c = getComp(g.id);
-      html += `<circle class="guide-ring" cx="${c.x}" cy="${c.y}" r="46"/>`;
+      html += `<circle class="guide-ring" cx="${c.x}" cy="${c.y}" r="46"/>` + burst(c.x, c.y, 0, true);
       html += `<g transform="translate(${c.x - 14} ${c.y + 46})"><text class="guide-hand tap" font-size="46">👆</text></g>`;
       say = g.type === 'fix' ? `반짝이는 ${eul(C.displayName(c))} 콕 눌러서 새 전구로 바꿔요!` : `반짝이는 ${eul(C.displayName(c))} 콕 눌러 봐요! (지금은 ${c.open ? '꺼짐' : '켜짐'})`;
     } else if (g.type === 'unwire') {
@@ -1155,13 +1187,13 @@
       if (geo) {
         html += `<path class="guide-badwire" d="${geo.d}"/>`;
         html += `<text class="guide-spark" x="${geo.mid.x - 40}" y="${geo.mid.y - 20}">✨</text><text class="guide-spark b" x="${geo.mid.x + 24}" y="${geo.mid.y - 26}">✨</text>`;
-        html += `<circle class="guide-ring" cx="${geo.mid.x}" cy="${geo.mid.y}" r="30"/>`;
+        html += burst(geo.mid.x, geo.mid.y, 0);
         html += `<g transform="translate(${geo.mid.x - 14} ${geo.mid.y + 34})"><text class="guide-hand tap" font-size="46">👆</text></g>`;
       }
       say = S.an && S.an.status === 'short' ? '앗 뜨거워요! 반짝이는 전선을 콕 눌러서 지워요.' : '반짝이는 전선을 콕 눌러서 지워 봐요.';
     } else if (g.type === 'remove') {
       const c = getComp(g.id), name = C.displayName(c);
-      html += `<circle class="guide-ring bad" cx="${c.x}" cy="${c.y}" r="58"/>`;
+      html += `<circle class="guide-ring bad" cx="${c.x}" cy="${c.y}" r="58"/>` + burst(c.x, c.y, 0, true);
       html += `<text class="guide-spark" x="${c.x - 62}" y="${c.y - 40}">✨</text><text class="guide-spark b" x="${c.x + 44}" y="${c.y - 46}">✨</text><text class="guide-spark" x="${c.x + 40}" y="${c.y + 58}">✨</text>`;
       html += `<text class="guide-no" x="${c.x}" y="${c.y - 64}">${g.why === 'reversed' ? '🙃' : '🚫'}</text>`;
       html += `<path class="guide-line" d="M${c.x - 60} ${c.y} L12 ${c.y}"/><text class="guide-num" x="40" y="${c.y - 18}">⬅</text>`;
@@ -1171,9 +1203,14 @@
         : g.why === 'reversed' ? `반짝이는 ${name}${jong(name) ? '이' : '가'} 거꾸로 이어졌어요!`
         : `반짝이는 ${name}${jong(name) ? '은' : '는'} 지금 필요 없어요!`;
       say = `${what} ${eul(name)} 꾹 잡고, 왼쪽 재료 상자로 쭉~ 끌어다 놓아요.` + (g.why === 'reversed' ? ' 그다음 다시 꺼내서 ＋는 −에 이어요.' : '');
+    } else if (g.type === 'next') {
+      const b = document.querySelector('#success:not(.hidden) #btn-next') || $('#btn-next2');
+      if (b) { b.classList.remove('shine'); void b.offsetWidth; b.classList.add('shine'); b.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+      say = '다 맞췄어요! 반짝이는 초록 「다음 ▶」 버튼을 콕 눌러요!';
     } else if (g.type === 'palette') {
       const el = document.querySelector(`.pal-item[data-kind="${g.kind}"]`);
       if (el) { el.classList.add('guide'); el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
+      document.querySelectorAll('.pal-item').forEach(x => { if (x !== el) x.classList.add('dim'); });
       html += `<g transform="translate(-14 40)">${hand('M60 320 L420 320', 1.8)}</g>`;
       say = `왼쪽 재료 상자에서 반짝이는 ${eul(KINDS[g.kind].name)} 꾹 잡고, 판 위로 쭉~ 끌어와요!`;
     }
@@ -1186,17 +1223,18 @@
     S.nudge = false; lastNudge = performance.now(); lastAct = performance.now();
     S.hintCount = (S.hintCount || 0) + 1;
     let plan = null;
-    try { if (mission().check) plan = planGuide(); } catch (e) { plan = null; }
+    if (S.succeeded && S.level < MISSIONS.length - 1) plan = { type: 'next' };
+    else try { if (mission().check) plan = planGuide(); } catch (e) { plan = null; }
     S.hintShown = (typeof why === 'string' ? why + '<br>' : '') + (plan ? '👆 ' + showGuide(plan) : smartHint());
-    S.chain = plan ? 3 : 0;     // 아이가 따라 하면 다음 걸음도 이어서 알려줘요
+    S.chain = plan && plan.type !== 'next' ? 3 : 0;     // 아이가 따라 하면 다음 걸음도 이어서 알려줘요
     const b = $('#btn-hint'); if (b) b.classList.remove('nudge');
     $('#fab-hint').classList.remove('nudge');
     const box = $('#hint-box');
     box.innerHTML = S.hintShown; box.classList.remove('hidden');
     box.classList.remove('flash'); void box.offsetWidth; box.classList.add('flash');
     speak(S.hintShown, true);
-    // 연결할 점들을 반짝이게
-    L.terms.querySelectorAll('.term').forEach(t => { t.classList.add('pulse'); });
+    // 콕 집어 알려줄 게 없을 때만 연결할 점들을 다 반짝이게
+    if (!plan) L.terms.querySelectorAll('.term').forEach(t => { t.classList.add('pulse'); });
   }
 
   function loadLevel(i) {

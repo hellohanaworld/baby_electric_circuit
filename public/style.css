@@ -474,3 +474,28 @@ body { background: linear-gradient(180deg, #d7f0ff 0%, #fdf6e3 100%); }
 .fab-hint.nudge::before { content: '👇'; position: absolute; top: -56px; font-size: 42px; animation: point .7s ease-in-out infinite alternate; }
 @keyframes fabNudge { from { box-shadow: 0 0 0 0 rgba(250, 176, 5, .9); transform: scale(1); } to { box-shadow: 0 0 0 18px rgba(250, 176, 5, 0); transform: scale(1.1); } }
 #side { padding-bottom: 120px; }
+
+/* v16: 회로 기호 · 번쩍 안내 · 다음 버튼 반짝 */
+.sym { pointer-events: none; }
+.sym-bg { fill: #fff; stroke: #495057; stroke-width: 1.4; opacity: .95; }
+.sym-ln { fill: none; stroke: #212529; stroke-width: 1.8; stroke-linecap: round; }
+.sym-dot { fill: #212529; }
+.motor-m { font-size: 15px; }
+
+.burst-ring { fill: none; stroke: #ffd43b; stroke-width: 6; }
+.burst-core { fill: rgba(255, 236, 120, .9); stroke: #ff922b; stroke-width: 4; animation: coreFlash .5s ease-in-out infinite alternate; }
+@keyframes coreFlash { from { opacity: .25; } to { opacity: 1; } }
+.burst-star { font-size: 26px; animation: starPop .6s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: center; }
+@keyframes starPop { from { transform: scale(.6) rotate(-15deg); opacity: .5; } to { transform: scale(1.3) rotate(15deg); opacity: 1; } }
+
+.pal-item.guide { animation: palFlash .45s ease-in-out infinite alternate; z-index: 2; }
+@keyframes palFlash { from { background: #fff; box-shadow: 0 0 0 0 rgba(255,146,43,.9); }
+  to { background: #fff3bf; box-shadow: 0 0 0 12px rgba(255,212,59,.0), 0 0 26px 6px rgba(255,212,59,.9); transform: scale(1.07); } }
+.pal-item.dim { opacity: .45; filter: grayscale(.6); }
+
+.pill.shine { position: relative; animation: nextShine .55s ease-in-out infinite alternate; }
+@keyframes nextShine { from { transform: scale(1); box-shadow: 0 4px 0 #2b8a3e, 0 0 0 0 rgba(255,212,59,.9); }
+  to { transform: scale(1.1); box-shadow: 0 4px 0 #2b8a3e, 0 0 22px 8px rgba(255,212,59,.95); } }
+.pill.shine::before, .pill.shine::after { content: '✨'; position: absolute; font-size: 22px; animation: starPop .6s ease-in-out infinite alternate; pointer-events: none; }
+.pill.shine::before { left: -18px; top: -14px; }
+.pill.shine::after { right: -18px; bottom: -12px; animation-delay: .3s; }
