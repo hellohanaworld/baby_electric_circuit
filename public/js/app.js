@@ -524,7 +524,8 @@
         const tok = {}; S.successTok = tok;
         const fire = () => { if (S.successTok !== tok) return; S.successTok = null; showSuccess(); };
         setTimeout(() => { if (S.successTok === tok) cheer(); }, flowing ? 500 : 0);   // 바로 화면 가운데에 "잘했어요!"
-        if (flowing) { waveDur = 2.4; afterWave = () => setTimeout(fire, 700); setTimeout(fire, 2400 + 700 + 700); }
+        // 어둠 속 불빛 쇼를 볼 시간을 주고 나서 축하 창을 띄워요
+        if (flowing) { waveDur = 2.4; afterWave = () => setTimeout(fire, 2000); setTimeout(fire, 2400 + 2000 + 700); }
         else setTimeout(fire, 1200);
       }
     }
@@ -1016,7 +1017,8 @@
     if (wave) applyWave();
     moveArrows(dt);
     if (S.heat) heatTick(t);
-    if (S.night && wave) drawDark();
+    if (S.night && (wave || S.nightShow)) drawDark();
+    if (S.night && S.nightShow) nightGrow(t);
     for (const f of fans) {
       if (wave && !wave.reached.has(f.id)) continue;
       fanAng[f.id] = ((fanAng[f.id] || 0) + f.I * 540 * dt) % 360;
@@ -1050,7 +1052,7 @@
   function drawDark() {
     if (!L.dark) return;
     if (!S.night) { if (darkKey) { L.dark.innerHTML = ''; darkKey = ''; } return; }
-    const lit = S.comps.filter(c => c.kind === 'bulb' && !c.broken && (!wave || wave.reached.has(c.id)))
+    const lit = S.comps.filter(c => c.kind === 'bulb' && !c.broken && (!wave || S.nightShow || wave.reached.has(c.id)))
       .map(c => ({ c, b: compInfo(c).b || 0 })).filter(x => x.b > 0.02);
     const key = 'n' + lit.map(x => `${x.c.id}:${x.c.x}:${x.c.y}:${x.c.rot}:${x.b.toFixed(2)}`).join('|');
     if (key === darkKey) return;
@@ -1066,8 +1068,9 @@
         rays += `<line x1="${(Math.cos(a2) * r1).toFixed(1)}" y1="${(-48 + Math.sin(a2) * r1).toFixed(1)}" x2="${(Math.cos(a2) * r2).toFixed(1)}" y2="${(-48 + Math.sin(a2) * r2).toFixed(1)}" class="night-ray"/>`;
       }
       lights += `<g class="night-light" opacity="${op.toFixed(2)}" transform="translate(${c.x} ${c.y}) rotate(${c.rot})">
-        <circle cx="0" cy="-48" r="${R.toFixed(0)}" fill="url(#warm)"/>
-        <circle cx="0" cy="-48" r="${(R * 0.45).toFixed(0)}" fill="url(#glow)"/>
+        <circle cx="0" cy="-48" r="${R.toFixed(0)}" data-r="${R.toFixed(0)}" fill="url(#warm)"/>
+        <circle cx="0" cy="-48" r="${(R * 0.45).toFixed(0)}" data-r="${(R * 0.45).toFixed(0)}" fill="url(#glow)"/>
+        ${[0, 1, 2, 3, 4, 5].map(i => { const a3 = i / 6 * Math.PI * 2 + 0.4, rr = R * 0.62; return `<text class="night-spark" x="${(Math.cos(a3) * rr).toFixed(0)}" y="${(-40 + Math.sin(a3) * rr).toFixed(0)}" style="animation-delay:${(i * 0.23).toFixed(2)}s">✨</text>`; }).join('')}
         ${rays}
         <circle cx="0" cy="-48" r="25" fill="#fffbe6" stroke="#ffe066" stroke-width="3"/>
         <path d="M-6 -26 L-6 -44 L-3 -50 L0 -44 L3 -50 L6 -44 L6 -26" fill="none" stroke="#ff922b" stroke-width="2.6" stroke-linejoin="round"/>
@@ -1078,6 +1081,15 @@
       L.dark.innerHTML = `<rect class="night" width="1000" height="640" rx="24"/>${stars}<g class="night-lights"></g>`;
     }
     L.dark.querySelector('.night-lights').innerHTML = lights;
+  }
+  // 성공 쇼: 깜깜해진 뒤(0.8초) 불빛이 1.4초 동안 점점 커지고, 잠깐 두근두근 빛나요
+  function nightGrow(now) {
+    const e = now - S.nightShow, g = Math.max(0, Math.min(1, (e - 800) / 1400));
+    const beat = 1 + 0.06 * Math.sin(e / 140);
+    const box = L.dark.querySelector('.night-lights'); if (!box) return;
+    box.setAttribute('opacity', Math.min(1, g * 1.6).toFixed(2));
+    box.querySelectorAll('[data-r]').forEach(el => el.setAttribute('r', (+el.dataset.r * (0.15 + 0.85 * g) * beat).toFixed(1)));
+    if (e > 6000) { S.nightShow = null; box.setAttribute('opacity', '1'); box.querySelectorAll('[data-r]').forEach(el => el.setAttribute('r', el.dataset.r)); }
   }
   function syncNight() {
     const b = $('#btn-night'); if (!b) return;
@@ -1107,7 +1119,11 @@
   // 성공 연출: 전구면 깜깜한 밤에 환하게, 선풍기면 바람이 쌩쌩
   function successShow() {
     const litB = S.comps.some(c => c.kind === 'bulb' && !c.broken && Math.abs(S.sol.comp[c.id].I) > PHYS.LIT_A);
-    if (litB && !S.night) { S.night = true; syncNight(); }
+    if (litB) {
+      S.night = true; S.nightShow = performance.now(); darkKey = ''; syncNight();
+      tone(1200, 0.05, 'square', 0.05);                                  // 딸깍 (불 끄는 소리)
+      setTimeout(() => { if (S.night) speak('깜깜한 밤에도 우리 전구가 환하게 빛나요!'); }, 1500);
+    }
     const fansOn = S.comps.filter(c => c.kind === 'motor' && Math.abs(S.sol.comp[c.id].I) > 0.1);
     for (const c of fansOn) {
       const A = Math.abs(S.sol.comp[c.id].I), g = rotV({ x: 0, y: -62 }, c.rot), x = c.x + g.x, y = c.y + g.y;
@@ -1524,7 +1540,7 @@
     S.level = clamp(i, 0, MISSIONS.length - 1);
     progress.level = S.level; save();
     S.comps = []; S.wires = []; S.sel = null; S.selWire = null; S.memo = {}; S.succeeded = false;
-    S.litCount = 0; S.litSet = null; S.night = false; S.wasShort = false; if (L.fx) L.fx.innerHTML = ''; syncNight(); S.colorIdx = 0;
+    S.litCount = 0; S.litSet = null; S.night = false; S.nightShow = null; S.wasShort = false; if (L.fx) L.fx.innerHTML = ''; syncNight(); S.colorIdx = 0;
     S.nudge = false; S.hintShown = ''; S.hintCount = 0; S.chain = 0; S.successTok = null; S.cheered = false; heatClear(); S.wasFlowing = false; wave = null; S.lastKeys = null; S.levelStart = performance.now(); lastAct = performance.now(); lastNudge = 0;
     const m = mission();
     const made = ((m.preset && m.preset.comps) || []).map(p => {

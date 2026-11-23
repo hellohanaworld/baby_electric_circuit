@@ -580,3 +580,5 @@ body { background: linear-gradient(180deg, #d7f0ff 0%, #fdf6e3 100%); }
 .restart-btn.armed { background: #ffe3e3; color: #c92a2a; animation: fabNudge .5s ease-in-out infinite alternate; }
 .restart-btn.hidden { display: none; }
 .night-ray { stroke: #ffe066; stroke-width: 4; stroke-linecap: round; }
+.night-spark { font-size: 22px; text-anchor: middle; animation: nightSpark 1.4s ease-in-out infinite; }
+@keyframes nightSpark { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
