@@ -1136,23 +1136,16 @@
     }
   }
 
-  // 성공하자마자 화면 한가운데에 크게 "잘했어요!"
+  // 성공하자마자: 글자 대신 깜깜한 밤 불빛 쇼(선풍기는 바람)가 칭찬이에요. "잘했어요"는 축하 창에서 한 번만.
   function cheer() {
     if (S.cheered) return;
     S.cheered = true;
-    sfx.success(); confetti();
-    document.querySelectorAll('.cheer').forEach(el => el.remove());
     successShow();
-    const el = document.createElement('div');
-    el.className = 'cheer';
-    el.innerHTML = '<div class="cheer-emo">🎉</div><div class="cheer-txt">잘했어요!</div>';
-    document.body.appendChild(el);
-    setTimeout(() => el.remove(), 2600);
-    speak('잘했어요!');
   }
   function showSuccess() {
     const m = mission();
-    if (!S.cheered) { sfx.success(); confetti(); successShow(); }
+    sfx.success(); confetti();
+    if (!S.cheered) successShow();
     document.querySelectorAll('.cheer').forEach(el => el.remove());
     const hasNext = S.level < MISSIONS.length - 1;
     const worldDone = !m.free && m.stage === 9;
