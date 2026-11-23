@@ -420,13 +420,13 @@
     };
     let h = '';
     for (const f of flows) {
-      if (f.A <= PHYS.ACTIVE_A || !f.el) continue;
+      if (f.A <= PHYS.ACTIVE_A || !f.el || f.cid != null) continue;   // 전선 위에만 (부품 속은 빼요)
       f.len = f.el.getTotalLength(); if (f.len < 24) continue;
       const V = pv(f.cref);
       f.sc = clamp(0.3 + 0.6 * V / 1.5, 0.8, 2.4);
       const n = Math.max(1, Math.round(f.len / 130));
       f.gap = f.len / n;
-      h += `<g data-ak="${f.key}">` + '<path class="arrow" style="display:none" d="M-11 -10 L10 0 L-11 10 L-5 0 Z"/>'.repeat(n) + '</g>';
+      h += `<g data-ak="${f.key}">` + '<path class="arrow" style="display:none" d="M-15 -14 L14 0 L-15 14 L-8 0 Z"/>'.repeat(n) + '</g>';
     }
     L.arrows.setAttribute('class', 'arrows' + (settings.electron ? ' elec' : '') + (short ? ' short' : ''));
     L.arrows.innerHTML = h;
