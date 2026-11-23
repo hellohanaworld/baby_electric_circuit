@@ -6,7 +6,7 @@
   const svg = $('#board');
   const L = {
     wires: $('#l-wires'), flow: $('#l-flow'), comps: $('#l-comps'),
-    labels: $('#l-labels'), terms: $('#l-terms'), ui: $('#l-ui'), wave: $('#l-wave'), guide: $('#l-guide')
+    labels: $('#l-labels'), terms: $('#l-terms'), ui: $('#l-ui'), wave: $('#l-wave'), guide: $('#l-guide'), arrows: $('#l-arrows')
   };
   const dragPath = $('#drag-wire');
   const GRID = 20, BW = 1000, BH = 640;
@@ -70,21 +70,61 @@
   };
 
   /* ---------- 읽어주기 (한국어 음성) ---------- */
+  /* 크롬·엣지·웨일 등에서 읽어주기가 조용히 멈추는 문제들을 피해요
+   *  - 한국어 목소리 목록은 늦게 도착해요 (voiceschanged)
+   *  - cancel() 바로 뒤 speak() 는 가끔 무시돼요 → 살짝 기다렸다 말해요
+   *  - 긴 문장은 중간에 끊겨요 → 문장마다 나눠 말해요
+   *  - 말하던 객체가 지워지면 소리가 멈춰요 → 붙잡아 둬요 */
+  const TTS = { voice: null, count: 0, ko: 0, err: '', said: 0, ended: 0, keep: [] };
+  function pickVoice() {
+    if (!('speechSynthesis' in window)) return;
+    const all = speechSynthesis.getVoices();
+    const ko = all.filter(v => v.lang && v.lang.toLowerCase().replace('_', '-').startsWith('ko'));
+    TTS.count = all.length; TTS.ko = ko.length;
+    TTS.voice = ko.find(v => v.localService) || ko.find(v => /google|microsoft|heami|yuna|sunhi/i.test(v.name)) || ko[0] || null;
+  }
+  if ('speechSynthesis' in window) {
+    pickVoice();
+    speechSynthesis.addEventListener ? speechSynthesis.addEventListener('voiceschanged', pickVoice) : (speechSynthesis.onvoiceschanged = pickVoice);
+  }
   function speak(text, force) {
     if ((!settings.voice && !force) || !('speechSynthesis' in window)) return;
     try {
-      speechSynthesis.cancel();
+      if (!TTS.voice) pickVoice();
+      const busy = speechSynthesis.speaking || speechSynthesis.pending;
+      if (busy) speechSynthesis.cancel();
+      if (speechSynthesis.paused) speechSynthesis.resume();
       const clean = text.replace(/<[^>]+>/g, ' ').replace(/\p{Extended_Pictographic}/gu, '')
         .replace(/(\d)\.(\d)V/g, '$1점$2볼트').replace(/(\d)V/g, '$1볼트')
         .replace(/(\d)\.(\d+)A/g, '$1점$2암페어').replace(/(\d)A/g, '$1암페어').replace(/(\d)Ω/g, '$1옴')
         .replace(/＋/g, '플러스 ').replace(/−/g, '마이너스 ')
         .replace(/[①-⑮]/g, ch => (ch.charCodeAt(0) - 0x2460 + 1) + '번');
-      const u = new SpeechSynthesisUtterance(clean);
-      u.lang = 'ko-KR'; u.rate = 0.95; u.pitch = 1.1;
-      const v = speechSynthesis.getVoices().find(v => v.lang && v.lang.toLowerCase().startsWith('ko'));
-      if (v) u.voice = v;
-      speechSynthesis.speak(u);
-    } catch (e) { }
+      const parts = clean.match(/[^.!?。~]+[.!?。~]*/g) || [clean];
+      const us = parts.map(t => t.trim()).filter(t => t.replace(/[\s.!?~,]/g, '')).map(t => {
+        const u = new SpeechSynthesisUtterance(t);
+        u.lang = 'ko-KR'; u.rate = 0.95; u.pitch = 1.1;
+        if (TTS.voice) u.voice = TTS.voice;
+        u.onend = () => { TTS.ended++; };
+        u.onerror = e => { if (e.error !== 'interrupted' && e.error !== 'canceled') TTS.err = e.error || 'error'; };
+        return u;
+      });
+      TTS.keep = us;
+      const go = () => { if (TTS.keep !== us) return; us.forEach(u => speechSynthesis.speak(u)); TTS.said++; };
+      if (busy) setTimeout(go, 150); else go();
+    } catch (e) { TTS.err = String(e); }
+  }
+  // 엄마 아빠용: 목소리가 안 나올 때 원인 찾기
+  function voiceDiag() {
+    if (!('speechSynthesis' in window)) return '❌ 이 브라우저는 읽어주기를 지원하지 않아요. 크롬이나 엣지에서 열어 주세요.';
+    pickVoice();
+    let h = '';
+    if (!settings.voice) h += '⚠️ 위쪽 🗣️ 버튼이 <b>꺼져</b> 있었어요. 지금 켰어요.<br>';
+    if (!TTS.ko) h += `❌ 이 컴퓨터(브라우저)에 <b>한국어 목소리가 없어요</b> (전체 목소리 ${TTS.count}개).<br>
+      👉 윈도우: 설정 → 시간 및 언어 → 음성 → "음성 추가"에서 <b>한국어</b>를 설치한 뒤 브라우저를 다시 켜 주세요. 또는 <b>크롬</b>(Google 한국의 목소리)이나 <b>엣지</b>로 열어 주세요.`;
+    else h += `✅ 한국어 목소리: <b>${TTS.voice ? TTS.voice.name : '?'}</b> (한국어 ${TTS.ko}개)`;
+    if (TTS.err) h += `<br>⚠️ 최근 오류: ${TTS.err}${TTS.err === 'not-allowed' ? ' (화면을 한 번 누른 뒤 다시 해 보세요)' : ''}`;
+    h += '<br>🔈 소리가 안 들리면 컴퓨터 볼륨, 탭의 음소거(탭 위 스피커 아이콘)도 확인해 주세요.';
+    return h;
   }
 
   /* ---------- 기하 ---------- */
@@ -294,7 +334,7 @@
         if (w.b.c + ':' + w.b.t === k) { if (I < 0) o -= I; else i += I; }
       }
       const net = o - i, fwd = net * dir > 0;   // 전지 단자에서 바깥으로 나가면 net > 0
-      fl.push({ key: 'j' + cid + '_' + t, d: fwd ? `M${p.x} ${p.y} L${q.x} ${q.y}` : `M${q.x} ${q.y} L${p.x} ${p.y}`,
+      fl.push({ key: 'j' + cid + '_' + t, cref: cid, d: fwd ? `M${p.x} ${p.y} L${q.x} ${q.y}` : `M${q.x} ${q.y} L${p.x} ${p.y}`,
         from: fwd ? k : k + '*', to: fwd ? k + '*' : k, A: Math.abs(net) });
     }
     // 점선 길잡이: 여기를 이으면 돼요 (X-1 스테이지)
@@ -314,7 +354,7 @@
       wHtml += `<path class="wire${sel ? ' sel' : ''}" d="${g.d}" stroke="${w.color}"/><path class="hose-in" d="${g.d}"/>`;
       const I = S.sol ? (S.sol.wire[w.id] || 0) : 0;
       const fwd = I * dir >= 0, ka = w.a.c + ':' + w.a.t + (g.ja ? '*' : ''), kb = w.b.c + ':' + w.b.t + (g.jb ? '*' : '');
-      fl.push({ key: 'w' + w.id, d: fwd ? g.d : g.rd, from: fwd ? ka : kb, to: fwd ? kb : ka, A: Math.abs(I) });
+      fl.push({ key: 'w' + w.id, cref: w.a.c, d: fwd ? g.d : g.rd, from: fwd ? ka : kb, to: fwd ? kb : ka, A: Math.abs(I) });
       if (sel) uHtml += btn(g.mid.x, g.mid.y, '✖', 'delwire', '#fa5252');
     }
 
@@ -327,7 +367,7 @@
       if (c.kind === 'battery' || isFinite(C.resistanceOf(c))) {
         const p0 = termPos(c, 0), p1 = termPos(c, 1), fwd = o.I * dir >= 0;
         const a = fwd ? p0 : p1, b = fwd ? p1 : p0;
-        fl.push({ key: 'c' + c.id, cid: c.id, d: `M${a.x} ${a.y} L${b.x} ${b.y}`, from: c.id + ':' + (fwd ? 0 : 1), to: c.id + ':' + (fwd ? 1 : 0), A: o.A });
+        fl.push({ key: 'c' + c.id, cid: c.id, cref: c.id, d: `M${a.x} ${a.y} L${b.x} ${b.y}`, from: c.id + ':' + (fwd ? 0 : 1), to: c.id + ':' + (fwd ? 1 : 0), A: o.A });
       }
       lHtml += labelSVG(c, o);
       for (const t of [0, 1]) {
@@ -350,9 +390,51 @@
     L.labels.innerHTML = lHtml; L.terms.innerHTML = tHtml; L.ui.innerHTML = uHtml;
 
     flows = fl.map(f => Object.assign(f, { el: L.flow.querySelector(`[data-bk="${f.key}"]`) }));
+    renderArrows(short);
     lights = [...L.comps.querySelectorAll('[data-light]')];
     if (wave) { prepareWave(); applyWave(); }
     fans = [...L.comps.querySelectorAll('[data-fan]')].map(el => ({ el, id: +el.dataset.fan, I: compInfo(getComp(+el.dataset.fan)).A }));
+  }
+
+  /* ---------- 전류 화살표 ----------
+   * 방향 = 알갱이와 같은 방향 (기본: 교과서 전류 ＋→−)
+   * 굵기 = 그 회로를 미는 전지 전압 (1.5V 얇게, 3V 굵게, 4.5V 아주 굵게)
+   * 빠르기 = 전류 (알갱이 속도와 같아요) */
+  const aPhase = {};
+  function renderArrows(short) {
+    const push = {};
+    const pv = id => {
+      if (push[id] == null) { const c = getComp(id); push[id] = c && S.sol && S.sol.node ? C.supplyV(S.comps, S.wires, S.sol, c) : 0; }
+      return push[id];
+    };
+    let h = '';
+    for (const f of flows) {
+      if (f.A <= PHYS.ACTIVE_A || !f.el) continue;
+      f.len = f.el.getTotalLength(); if (f.len < 24) continue;
+      const V = pv(f.cref);
+      f.sc = clamp(0.3 + 0.6 * V / 1.5, 0.8, 2.4);
+      const n = Math.max(1, Math.round(f.len / 130));
+      f.gap = f.len / n;
+      h += `<g data-ak="${f.key}">` + '<path class="arrow" style="display:none" d="M-11 -10 L10 0 L-11 10 L-5 0 Z"/>'.repeat(n) + '</g>';
+    }
+    L.arrows.setAttribute('class', 'arrows' + (settings.electron ? ' elec' : '') + (short ? ' short' : ''));
+    L.arrows.innerHTML = h;
+    for (const f of flows) if (f.sc) { f.arr = [...L.arrows.querySelector(`[data-ak="${f.key}"]`).children]; f.hid = true; }
+  }
+  function moveArrows(dt) {
+    for (const f of flows) {
+      if (!f.arr) continue;
+      if (wave && !wave.moving.has(f.key)) { if (!f.hid) { f.arr.forEach(a => { a.style.display = 'none'; }); f.hid = true; } continue; }
+      const ap = (((aPhase[f.key] || 0) + Math.min(f.A * SPEED, 420) * dt) % f.gap + f.gap) % f.gap;
+      aPhase[f.key] = ap;
+      f.arr.forEach((a, i) => {
+        const d = ap + i * f.gap;
+        const d0 = Math.max(0, Math.min(f.len - 2, d)), p = f.el.getPointAtLength(d0), q = f.el.getPointAtLength(d0 + 2);
+        const ang = Math.atan2(q.y - p.y, q.x - p.x) * 180 / Math.PI;
+        a.setAttribute('transform', `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)}) rotate(${ang.toFixed(1)}) scale(${f.sc.toFixed(2)})`);
+      });
+      if (f.hid) { f.arr.forEach(a => { a.style.display = ''; }); f.hid = false; }
+    }
   }
 
   function btn(x, y, label, action, color) {
@@ -428,8 +510,9 @@
         // 성공 화면은 흐름 애니메이션이 중간에 끊겨도 꼭 나와요
         const tok = {}; S.successTok = tok;
         const fire = () => { if (S.successTok !== tok) return; S.successTok = null; showSuccess(); };
-        if (flowing) { waveDur = 4; afterWave = () => setTimeout(fire, 1600); setTimeout(fire, 4000 + 1600 + 900); }
-        else setTimeout(fire, 900);
+        setTimeout(() => { if (S.successTok === tok) cheer(); }, flowing ? 500 : 0);   // 바로 화면 가운데에 "잘했어요!"
+        if (flowing) { waveDur = 2.4; afterWave = () => setTimeout(fire, 700); setTimeout(fire, 2400 + 700 + 700); }
+        else setTimeout(fire, 1200);
       }
     }
     if (!waveDur && flowing && !S.wasFlowing) waveDur = 2.6;   // 새로 이어졌을 때
@@ -505,6 +588,7 @@
       </div>`;
     }
     h += `<div class="summary">${an.summary.map(s => `<p>${s}</p>`).join('')}</div>`;
+    h += '<p class="water-note">➡️ 화살표 = 전기가 가는 길. 전지가 세게 밀수록(전지를 줄줄이 이을수록) 화살표가 굵어져요!</p>';
     h += '<p class="water-note">🔵 전선 속에는 전자 알갱이가 꽉 차 있어요. 길이 이어지면 다 같이 움직여요. 빠를수록 전기가 세요!</p>';
     el.innerHTML = h;
   }
@@ -525,6 +609,7 @@
     h += `<h3>아이에게 쓰는 말 ↔ 실제 용어</h3>
       <ul><li><b>미는 힘</b> = 전압 (V, 볼트)</li><li><b>막는 힘</b> = 저항 (Ω, 옴)</li><li><b>전기 세기</b> = 전류 (A, 암페어) · 번개 ⚡ 1개 = 0.25A</li>
       <li><b>줄줄이(기차)</b> = 직렬 · <b>나란히(사다리)</b> = 병렬</li>
+      <li><b>➡️ 화살표</b>: 전류의 방향(알갱이 방향 설정을 따름)입니다. <b>굵기 = 그 회로를 미는 전지 전압</b>(1.5V 얇게, 3V 굵게, 4.5V 아주 굵게), <b>빠르기 = 전류 크기</b>입니다. 전압은 원래 두 점 사이의 차이라서, 여기서는 그 회로 전체에 걸린 전지 전압을 굵기로 보여줍니다.</li>
       <li><b>🔣 부품 속 하얀 그림 = 회로도 기호</b>: 교과서 회로도에 쓰는 표준 기호입니다. 전지(긴 선이 ＋극, 짧고 굵은 선이 −극), 전구(동그라미 속 ×), 스위치(열리면 날이 들림), 전동기(동그라미 속 M), 저항(네모). 부품을 돌리면 기호도 같이 돌아 단자 방향과 맞습니다.</li>
       <li><b>🔵 알갱이 = 자유전자</b>: 금속 전선 속에는 움직일 수 있는 전자가 원래 가득 있습니다. 그래서 연결 전에도 알갱이가 보이고, 지우개·나무(부도체)에는 없습니다.</li>
       <li><b>⚡ 밀림 파동</b>: 회로가 닫히면 마지막으로 이어진 곳에서 전기적 '밀림'(전자기파)이 양쪽으로 퍼집니다. 실제 속도는 빛의 약 60~90%라서 1m 전선을 몇 나노초 만에 지나갑니다. 화면은 수십억 배 느리게 보여주는 것입니다.</li>
@@ -826,6 +911,7 @@
       f.el.setAttribute('stroke-dashoffset', (-ph).toFixed(2));
     }
     if (wave) applyWave();
+    moveArrows(dt);
     for (const f of fans) {
       if (wave && !wave.reached.has(f.id)) continue;
       fanAng[f.id] = ((fanAng[f.id] || 0) + f.I * 540 * dt) % 360;
@@ -851,10 +937,23 @@
     if (m.id === 'parent') m.classList.add('hidden'); else closeModals();
   }));
 
+  // 성공하자마자 화면 한가운데에 크게 "잘했어요!"
+  function cheer() {
+    if (S.cheered) return;
+    S.cheered = true;
+    sfx.success(); confetti();
+    document.querySelectorAll('.cheer').forEach(el => el.remove());
+    const el = document.createElement('div');
+    el.className = 'cheer';
+    el.innerHTML = '<div class="cheer-emo">🎉</div><div class="cheer-txt">잘했어요!</div>';
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 2600);
+    speak('잘했어요!');
+  }
   function showSuccess() {
     const m = mission();
-    sfx.success();
-    confetti();
+    if (!S.cheered) { sfx.success(); confetti(); }
+    document.querySelectorAll('.cheer').forEach(el => el.remove());
     const hasNext = S.level < MISSIONS.length - 1;
     const worldDone = !m.free && m.stage === 9;
     const nx = MISSIONS[S.level + 1];
@@ -1242,7 +1341,7 @@
     progress.level = S.level; save();
     S.comps = []; S.wires = []; S.sel = null; S.selWire = null; S.memo = {}; S.succeeded = false;
     S.litCount = 0; S.wasShort = false; S.colorIdx = 0;
-    S.nudge = false; S.hintShown = ''; S.hintCount = 0; S.chain = 0; S.successTok = null; S.wasFlowing = false; wave = null; S.lastKeys = null; S.levelStart = performance.now(); lastAct = performance.now(); lastNudge = 0;
+    S.nudge = false; S.hintShown = ''; S.hintCount = 0; S.chain = 0; S.successTok = null; S.cheered = false; S.wasFlowing = false; wave = null; S.lastKeys = null; S.levelStart = performance.now(); lastAct = performance.now(); lastNudge = 0;
     const m = mission();
     const made = ((m.preset && m.preset.comps) || []).map(p => {
       const ex = { rot: p.rot || 0 };
@@ -1267,11 +1366,25 @@
   $('#btn-electron').onclick = () => { settings.electron = !settings.electron; save(); syncToggles(); renderBoard(); renderNote(); toast(settings.electron ? '파란 알갱이 = 전자 (−에서 ＋로 움직여요)' : '노란 알갱이 = 교과서의 전류 방향 (＋에서 −로)'); };
   $('#btn-numbers').onclick = () => { settings.numbers = !settings.numbers; save(); syncToggles(); renderBoard(); renderNote(); renderBars(); };
   $('#btn-sound').onclick = () => { settings.sound = !settings.sound; save(); syncToggles(); };
-  $('#btn-voice').onclick = () => { settings.voice = !settings.voice; save(); syncToggles(); if (!settings.voice && 'speechSynthesis' in window) speechSynthesis.cancel(); };
+  $('#btn-voice').onclick = () => {
+    settings.voice = !settings.voice; save(); syncToggles();
+    if (!settings.voice && 'speechSynthesis' in window) speechSynthesis.cancel();
+    toast(settings.voice ? '🗣️ 읽어주기 켰어요' : '🔇 읽어주기 껐어요');
+    if (settings.voice) speak('읽어주기를 켰어요!');
+  };
   $('#btn-reset').onclick = () => loadLevel(S.level);
   $('#fab-hint').onclick = () => { audio(); giveHint(); };
   $('#btn-map').onclick = () => { renderMap(); openModal('#map'); };
   $('#btn-info').onclick = () => openModal('#info');
+  $('#btn-voice-test').onclick = () => {
+    audio();
+    if (!settings.voice) { settings.voice = true; save(); syncToggles(); }
+    TTS.err = '';
+    speak('안녕! 목소리가 잘 들리나요? 전기 놀이를 시작해요!', true);
+    const box = $('#voice-diag');
+    box.innerHTML = voiceDiag(); box.classList.remove('hidden');
+    setTimeout(() => { box.innerHTML = voiceDiag(); }, 1500);
+  };
   $('#btn-unlock').onclick = () => { progress.unlockAll = true; save(); renderMap(); };
   $('#btn-start').onclick = () => {
     audio();

@@ -499,3 +499,25 @@ body { background: linear-gradient(180deg, #d7f0ff 0%, #fdf6e3 100%); }
 .pill.shine::before, .pill.shine::after { content: '✨'; position: absolute; font-size: 22px; animation: starPop .6s ease-in-out infinite alternate; pointer-events: none; }
 .pill.shine::before { left: -18px; top: -14px; }
 .pill.shine::after { right: -18px; bottom: -12px; animation-delay: .3s; }
+
+/* v17: 가운데 "잘했어요!" · 전류 화살표 */
+.cheer { position: fixed; left: 50%; top: 50%; z-index: 120; pointer-events: none; text-align: center;
+  transform: translate(-50%, -50%); animation: cheerPop 2.6s ease-out forwards; }
+.cheer-emo { font-size: 110px; line-height: 1; }
+.cheer-txt { font-size: 72px; font-weight: 900; color: #ff922b; white-space: nowrap;
+  -webkit-text-stroke: 3px #fff; paint-order: stroke fill; text-shadow: 0 6px 0 #e8590c, 0 10px 30px rgba(0,0,0,.25); }
+@keyframes cheerPop {
+  0% { transform: translate(-50%, -50%) scale(.3); opacity: 0; }
+  15% { transform: translate(-50%, -50%) scale(1.15); opacity: 1; }
+  25% { transform: translate(-50%, -50%) scale(1); }
+  80% { opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1.05); opacity: 0; } }
+
+#l-arrows { pointer-events: none; }
+.arrows .arrow { fill: #ff922b; stroke: #fff; stroke-width: 2.5; stroke-linejoin: round; paint-order: stroke; filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.45)); }
+.arrows.short .arrow { fill: #fa5252; }
+
+/* v18: 소리·읽어주기가 꺼지면 빨간 줄로 확실히 */
+.pill.big-ico.toggle { position: relative; }
+.pill.big-ico.toggle:not(.on)::after { content: ''; position: absolute; left: 18%; right: 18%; top: 50%; height: 5px; border-radius: 3px;
+  background: #fa5252; transform: rotate(-35deg); box-shadow: 0 0 0 2px #fff; }

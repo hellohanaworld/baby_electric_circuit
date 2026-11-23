@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=16">
+  <link rel="stylesheet" href="style.css?v=18">
 </head>
 <body>
   <header class="top">
@@ -47,6 +47,7 @@
         <rect x="0" y="0" width="1000" height="640" rx="24" fill="url(#grid)"/>
         <g id="l-wires"></g>
         <g id="l-flow"></g>
+        <g id="l-arrows"></g>
         <g id="l-comps"></g>
         <g id="l-labels"></g>
         <g id="l-terms"></g>
@@ -105,6 +106,8 @@
         <button id="btn-numbers" class="pill toggle">🔢 숫자·수식 보이기</button>
         <button id="btn-electron" class="pill toggle">🟡 점 = 전류 (＋→−)</button>
       </div>
+      <div class="m-btns"><button id="btn-voice-test" class="pill">🔊 목소리 시험 (읽어주기가 안 나올 때)</button></div>
+      <p id="voice-diag" class="setting-note hidden"></p>
       <p class="setting-note">알갱이 버튼: 파란 알갱이는 실제로 움직이는 '전자'(−→＋), 노란 알갱이는 교과서의 '전류 방향'(＋→−)입니다. 학교에서 전류 방향을 배울 때는 노란 알갱이로 바꿔 보여 주세요.</p>
 
       <h3>📌 꼭 읽어 주세요 (안내 및 면책)</h3>
@@ -147,9 +150,9 @@
     </div>
   </div>
 
-  <script src="js/sim.js?v=16"></script>
-  <script src="js/missions.js?v=16"></script>
-  <script src="js/stages.js?v=16"></script>
-  <script src="js/app.js?v=16"></script>
+  <script src="js/sim.js?v=18"></script>
+  <script src="js/missions.js?v=18"></script>
+  <script src="js/stages.js?v=18"></script>
+  <script src="js/app.js?v=18"></script>
 </body>
 </html>
