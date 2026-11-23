@@ -1561,6 +1561,34 @@
     $('#start').classList.add('hidden');
     loadLevel(unlocked(progress.level || 0) ? (progress.level || 0) : 0);
   };
+  /* ---------- 처음부터 하기 ----------
+   * 진행 기록은 서버가 아니라 이 브라우저(localStorage)에 저장돼요. 그래서 새로고침해도 이어서 해요.
+   * 실수로 지우지 않게 두 번 눌러야 지워져요. (소리·읽어주기 같은 설정은 그대로) */
+  function armRestart(btn, onDone) {
+    let armed = false, t = null;
+    const label = btn.textContent;
+    btn.onclick = () => {
+      audio();
+      if (!armed) {
+        armed = true; btn.classList.add('armed');
+        btn.textContent = '⚠️ 정말요? 한 번 더 누르면 ⭐가 다 지워져요';
+        speak('정말 처음부터 할까요? 한 번 더 누르면 별이 다 지워져요.');
+        clearTimeout(t); t = setTimeout(() => { armed = false; btn.textContent = label; btn.classList.remove('armed'); }, 4000);
+        return;
+      }
+      clearTimeout(t); armed = false; btn.textContent = label; btn.classList.remove('armed');
+      progress.done = []; progress.unlockAll = false; progress.level = 0; save();
+      onDone();
+    };
+  }
+  armRestart($('#btn-restart'), () => { $('#start').classList.add('hidden'); loadLevel(0); toast('🔄 처음부터 시작해요! 1-1'); });
+  armRestart($('#btn-restart2'), () => { closeModals(); loadLevel(0); toast('🔄 처음부터 시작해요! 1-1'); });
+  // 시작 화면: 하던 게 있으면 "이어서 하기"와 "처음부터 하기"를 같이 보여줘요
+  if (progress.done.length || progress.level) {
+    const m = MISSIONS[progress.level] || MISSIONS[0];
+    $('#btn-start').textContent = `▶ 이어서 하기 (${m.free ? m.title : m.label})`;
+    $('#btn-restart').classList.remove('hidden');
+  }
   if ('speechSynthesis' in window) speechSynthesis.getVoices();
 
   syncToggles();

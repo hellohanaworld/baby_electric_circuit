@@ -576,3 +576,8 @@ body { background: linear-gradient(180deg, #d7f0ff 0%, #fdf6e3 100%); }
 .wind-leaf { font-size: 26px; animation: leafFly 1.6s linear infinite; transform-box: fill-box; }
 .wind-leaf.b { animation-delay: .8s; }
 @keyframes leafFly { from { transform: translate(0, 0) rotate(0); opacity: 1; } to { transform: translate(240px, -30px) rotate(360deg); opacity: 0; } }
+
+/* v21: 처음부터 하기 */
+.restart-btn { background: #fff; color: #495057; margin-top: 10px; }
+.restart-btn.armed { background: #ffe3e3; color: #c92a2a; animation: fabNudge .5s ease-in-out infinite alternate; }
+.restart-btn.hidden { display: none; }
