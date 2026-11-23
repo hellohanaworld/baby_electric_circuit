@@ -120,6 +120,7 @@
     }
     for (const c of comps) {
       const a = idx.get(c.id + ':0'), b = idx.get(c.id + ':1');
+      if (c.kind === 'battery' && c.broken) continue;   // 타 버린 전지: 밀지도, 통하지도 않아요
       if (c.kind === 'battery') {
         const g = 1 / PHYS.R_INT;
         stamp(a, b, g);
@@ -137,6 +138,7 @@
     for (const [k, i] of idx) res.node[k] = V[i];
     for (const c of comps) {
       const v0 = V[idx.get(c.id + ':0')], v1 = V[idx.get(c.id + ':1')];
+      if (c.kind === 'battery' && c.broken) { res.comp[c.id] = { I: 0, V: 0 }; continue; }
       if (c.kind === 'battery') {
         res.comp[c.id] = { I: (PHYS.V_CELL - (v1 - v0)) / PHYS.R_INT, V: v1 - v0 };
       } else {
@@ -159,7 +161,7 @@
     const find = k => { if (parent[k] == null) parent[k] = k; while (parent[k] !== k) { parent[k] = parent[parent[k]]; k = parent[k]; } return k; };
     const union = (a, b) => { a = find(a); b = find(b); if (a !== b) parent[a] = b; };
     for (const w of wires) union(w.a.c + ':' + w.a.t, w.b.c + ':' + w.b.t);
-    for (const x of comps) if (x.kind === 'battery' || isFinite(resistanceOf(x))) union(x.id + ':0', x.id + ':1');
+    for (const x of comps) if ((x.kind === 'battery' && !x.broken) || isFinite(resistanceOf(x))) union(x.id + ':0', x.id + ':1');
     const root = find(c.id + ':0');
     let hi = -Infinity, lo = Infinity;
     for (const x of comps) {
@@ -194,6 +196,7 @@
     if (!has('battery')) return '왼쪽에서 전지 🔋를 꺼내요!';
     if (!comps.some(c => KINDS[c.kind].cat === 'load')) return '전구 💡를 꺼내요!';
     if (!wires.length) return '동그란 점 ⚪을 꾹 누르고 다른 점까지 쭉~ 끌어요!';
+    if (comps.some(c => c.kind === 'battery' && c.broken)) return '까맣게 탄 전지를 콕 누르면 새 전지! 🔋';
     if (comps.some(c => c.kind === 'bulb' && c.broken)) return '전구가 고장 났어요. 전구를 콕 누르면 새 전구! 💡';
     for (const c of comps) {
       const k = KINDS[c.kind];

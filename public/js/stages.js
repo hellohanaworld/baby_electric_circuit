@@ -9,99 +9,59 @@
  *   X-8      : 전지만 놓여 있음
  *   X-9      : 빈 판에서 다 만들기
  *   X-10     : 빈 판 + 필요 없는 재료가 섞여 있음
+ * 월드 1~5 는 전구, 6~10 은 선풍기로 같은 순서(1개 → 스위치 → 전지 2개 → 기차(직렬) → 사다리(병렬))를 배워요.
  */
 (function (global) {
   'use strict';
   const BASE = global.WORLD_BASE;
 
   // 레이아웃: comps = [종류, x, y, {추가}], wires = [부품i, 단자, 부품j, 단자]  (전지 단자 1 = ＋)
+  // 레이아웃 A(쉬움) → B(한 걸음 더: 스위치나 전지가 하나 더) 순서로 스테이지가 섞여 나와요.
+  // 같은 모양을 전구(1~5)와 선풍기(6~10)로 두 번 배워요. 선풍기는 최대 2개.
+  const ONE = load => ({ // 전지 1 + 부품 1
+    layouts: [
+      { comps: [['battery', 500, 480], [load, 500, 250]], wires: [[0, 1, 1, 1], [1, 0, 0, 0]] },
+      { comps: [['battery', 300, 450], [load, 680, 280]], wires: [[0, 1, 1, 1], [1, 0, 0, 0]] }
+    ]
+  });
+  const SWITCH = load => ({ // 전지 1 + 부품 1 + 스위치 1
+    layouts: [
+      { comps: [['battery', 500, 500], [load, 680, 270], ['switch', 320, 270, { open: false }]], wires: [[0, 1, 1, 1], [1, 0, 2, 1], [2, 0, 0, 0]] },
+      { comps: [['battery', 320, 490], ['switch', 700, 490, { open: false }], [load, 500, 250]], wires: [[0, 1, 1, 0], [1, 1, 2, 1], [2, 0, 0, 0]] }
+    ]
+  });
+  const STRONG = load => ({ // 전지 2개 줄줄이 (+ B: 스위치)
+    layouts: [
+      { comps: [['battery', 380, 500], ['battery', 620, 500], [load, 500, 250]], wires: [[0, 1, 1, 0], [1, 1, 2, 1], [2, 0, 0, 0]] },
+      { comps: [['battery', 300, 520], ['battery', 520, 520], [load, 720, 270], ['switch', 330, 270, { open: false }]],
+        wires: [[0, 1, 1, 0], [1, 1, 2, 1], [2, 0, 3, 1], [3, 0, 0, 0]] }
+    ]
+  });
+  const SERIES = load => ({ // 부품 2개 한 줄 (+ B: 가운데 스위치)
+    layouts: [
+      { comps: [['battery', 500, 500], [load, 330, 250], [load, 670, 250]], wires: [[0, 1, 2, 1], [2, 0, 1, 1], [1, 0, 0, 0]] },
+      { comps: [['battery', 500, 520], [load, 270, 260], [load, 730, 260], ['switch', 500, 260, { open: false }]],
+        wires: [[0, 1, 2, 1], [2, 0, 3, 1], [3, 0, 1, 1], [1, 0, 0, 0]] }
+    ]
+  });
+  const PARALLEL = load => ({ // 부품 2개 나란히 (+ B: 전지 2개 + 갈래마다 스위치)
+    layouts: [
+      { comps: [['battery', 500, 520], [load, 300, 250], [load, 700, 250]], wires: [[0, 1, 1, 1], [0, 1, 2, 1], [1, 0, 0, 0], [2, 0, 0, 0]] },
+      { comps: [['battery', 400, 550], ['battery', 600, 550], [load, 380, 220], [load, 380, 410], ['switch', 700, 220, { open: false }], ['switch', 700, 410, { open: false }]],
+        wires: [[0, 1, 1, 0], [1, 1, 4, 1], [4, 0, 2, 1], [2, 0, 0, 0], [1, 1, 5, 1], [5, 0, 3, 1], [3, 0, 0, 0]] }
+    ]
+  });
   const W = [
-    { // 1 불을 켜요
-      act: '전구에 불을 켜요!',
-      layouts: [
-        { comps: [['battery', 500, 480], ['bulb', 500, 240]], wires: [[0, 1, 1, 1], [1, 0, 0, 0]] },
-        { comps: [['battery', 300, 440], ['bulb', 680, 260]], wires: [[0, 1, 1, 1], [1, 0, 0, 0]] }
-      ],
-      extra: { eraser: 1, chopstick: 1 }
-    },
-    { // 2 스위치
-      act: '불이 켜지면 스위치를 콕 눌러서 꺼 봐요!',
-      layouts: [
-        { comps: [['battery', 500, 500], ['bulb', 680, 260], ['switch', 320, 260, { open: false }]], wires: [[0, 1, 1, 1], [1, 0, 2, 1], [2, 0, 0, 0]] },
-        { comps: [['battery', 320, 480], ['switch', 700, 480, { open: false }], ['bulb', 500, 240]], wires: [[0, 1, 1, 0], [1, 1, 2, 1], [2, 0, 0, 0]] }
-      ],
-      extra: { eraser: 1, battery: 1 }
-    },
-    { // 3 전기가 통할까? ('MAT' = 스테이지마다 바뀌는 물건)
-      act: '물건으로도 전기가 지나갈까요?',
-      layouts: [
-        { comps: [['battery', 300, 480], ['bulb', 540, 220], ['MAT', 700, 420]], wires: [[0, 1, 2, 0], [2, 1, 1, 1], [1, 0, 0, 0]] },
-        { comps: [['battery', 500, 500], ['bulb', 300, 240], ['MAT', 700, 240]], wires: [[0, 1, 2, 1], [2, 0, 1, 1], [1, 0, 0, 0]] }
-      ],
-      mats: ['clip', 'coin', 'clip', 'coin', 'clip', 'coin', 'coin', 'clip', 'coin', 'clip']
-    },
-    { // 4 더 밝게 (전지 직렬)
-      act: '전지 2개로 아주 밝게!',
-      layouts: [
-        { comps: [['battery', 380, 500], ['battery', 620, 500], ['bulb', 500, 240]], wires: [[0, 1, 1, 0], [1, 1, 2, 1], [2, 0, 0, 0]] },
-        { comps: [['battery', 260, 420], ['battery', 480, 420], ['bulb', 740, 280]], wires: [[0, 1, 1, 0], [1, 1, 2, 1], [2, 0, 0, 0]] }
-      ],
-      extra: { eraser: 1, bulb: 1 }
-    },
-    { // 5 전구 기차 (전구 직렬)
-      act: '전구 2개를 한 줄로 켜요!',
-      layouts: [
-        { comps: [['battery', 500, 500], ['bulb', 330, 240], ['bulb', 670, 240]], wires: [[0, 1, 2, 1], [2, 0, 1, 1], [1, 0, 0, 0]] },
-        { comps: [['battery', 300, 520], ['bulb', 400, 220], ['bulb', 620, 360]], wires: [[0, 1, 2, 1], [2, 0, 1, 1], [1, 0, 0, 0]] }
-      ],
-      extra: { chopstick: 1, clip: 1 }
-    },
-    { // 6 전구 사다리 (전구 병렬)
-      act: '전구 2개를 둘 다 밝게!',
-      layouts: [
-        { comps: [['battery', 500, 540], ['bulb', 500, 200], ['bulb', 500, 370]], wires: [[0, 1, 1, 1], [0, 1, 2, 1], [1, 0, 0, 0], [2, 0, 0, 0]] },
-        { comps: [['battery', 500, 520], ['bulb', 300, 240], ['bulb', 700, 240]], wires: [[0, 1, 1, 1], [0, 1, 2, 1], [1, 0, 0, 0], [2, 0, 0, 0]] }
-      ],
-      extra: { chopstick: 1, switch: 1 }
-    },
-    { // 7 전지 친구 (전지 병렬)
-      act: '전지 2개가 나란히 같이 일해요!',
-      layouts: [
-        { comps: [['battery', 400, 400], ['battery', 400, 540], ['bulb', 700, 220]], wires: [[0, 1, 1, 1], [0, 0, 1, 0], [0, 1, 2, 1], [2, 0, 0, 0]] },
-        { comps: [['battery', 640, 380], ['battery', 640, 530], ['bulb', 360, 220]], wires: [[0, 0, 1, 0], [0, 1, 1, 1], [0, 1, 2, 1], [2, 0, 0, 0]] }
-      ],
-      extra: { eraser: 1, coin: 1 }
-    },
-    { // 8 선풍기 쌩쌩 (전지 3개 직렬)
-      act: '선풍기를 쌩쌩 돌려요!',
-      layouts: [
-        { comps: [['battery', 250, 500], ['battery', 450, 500], ['battery', 650, 500], ['motor', 650, 230], ['switch', 300, 230, { open: false }]],
-          wires: [[0, 1, 1, 0], [1, 1, 2, 0], [2, 1, 3, 1], [3, 0, 4, 1], [4, 0, 0, 0]] },
-        { comps: [['battery', 300, 540], ['battery', 500, 540], ['battery', 700, 540], ['motor', 480, 240], ['switch', 780, 340, { open: false }]],
-          wires: [[0, 1, 1, 0], [1, 1, 2, 0], [2, 1, 4, 1], [4, 0, 3, 1], [3, 0, 0, 0]] }
-      ],
-      extra: { bulb: 1, eraser: 1 }
-    },
-    { // 9 우리 집 전등 (병렬 + 스위치)
-      act: '스위치를 하나씩 꺼 봐요! 전구가 따로따로 꺼져요.',
-      layouts: [
-        { comps: [['battery', 500, 540], ['bulb', 380, 200], ['bulb', 380, 380], ['switch', 700, 200, { open: false }], ['switch', 700, 380, { open: false }]],
-          wires: [[0, 1, 3, 1], [3, 0, 1, 1], [1, 0, 0, 0], [0, 1, 4, 1], [4, 0, 2, 1], [2, 0, 0, 0]] },
-        { comps: [['battery', 500, 540], ['bulb', 640, 200], ['bulb', 640, 380], ['switch', 340, 200, { open: false }], ['switch', 340, 380, { open: false }]],
-          wires: [[0, 1, 1, 1], [1, 0, 3, 1], [3, 0, 0, 0], [0, 1, 2, 1], [2, 0, 4, 1], [4, 0, 0, 0]] }
-      ],
-      extra: { chopstick: 1 }
-    },
-    { // 10 딱 알맞게 (저항)
-      act: '전구가 고장 나지 않게 저항으로 막아 줘요!',
-      layouts: [
-        { comps: [['battery', 250, 520], ['battery', 450, 520], ['battery', 650, 520], ['resistor', 300, 220], ['resistor', 500, 220], ['bulb', 740, 220]],
-          wires: [[0, 1, 1, 0], [1, 1, 2, 0], [2, 1, 5, 1], [5, 0, 4, 1], [4, 0, 3, 1], [3, 0, 0, 0]] },
-        { comps: [['battery', 300, 520], ['battery', 500, 520], ['battery', 700, 520], ['resistor', 500, 240], ['resistor', 740, 240], ['bulb', 260, 240]],
-          wires: [[0, 1, 1, 0], [1, 1, 2, 0], [2, 1, 4, 1], [4, 0, 3, 1], [3, 0, 5, 1], [5, 0, 0, 0]] }
-      ],
-      extra: { clip: 1 }
-    }
+    Object.assign({ act: '전구에 불을 켜요!', extra: { eraser: 1, switch: 1 } }, ONE('bulb')),
+    Object.assign({ act: '불이 켜지면 스위치를 콕 눌러서 꺼 봐요!', extra: { battery: 1, eraser: 1 } }, SWITCH('bulb')),
+    Object.assign({ act: '전지 2개로 아주 밝게!', extra: { bulb: 1, eraser: 1 } }, STRONG('bulb')),
+    Object.assign({ act: '전구 2개를 한 줄로 켜요!', extra: { battery: 1, chopstick: 1 } }, SERIES('bulb')),
+    Object.assign({ act: '전구 2개를 나란히 둘 다 밝게!', extra: { switch: 1, eraser: 1 } }, PARALLEL('bulb')),
+    Object.assign({ act: '선풍기를 돌려요!', extra: { bulb: 1, eraser: 1 } }, ONE('motor')),
+    Object.assign({ act: '선풍기가 돌면 스위치를 콕 눌러서 멈춰 봐요!', extra: { battery: 1, chopstick: 1 } }, SWITCH('motor')),
+    Object.assign({ act: '전지 2개로 쌩쌩!', extra: { motor: 1, eraser: 1 } }, STRONG('motor')),
+    Object.assign({ act: '선풍기 2개를 한 줄로 돌려요!', extra: { bulb: 1, eraser: 1 } }, SERIES('motor')),
+    Object.assign({ act: '선풍기 2개를 나란히 둘 다 쌩쌩!', extra: { bulb: 1, chopstick: 1 } }, PARALLEL('motor'))
   ];
 
   // 스테이지 순서표 (L: 레이아웃, M: 거울, rm: 빠진 전선, hide: 재료 상자에 둘 부품, keep: 판에 둘 부품)
@@ -149,7 +109,8 @@
     }
 
     // 재료 상자
-    const inv = Object.assign({}, base.inv);
+    // 재료 상자 = 이 스테이지 회로에 필요한 만큼 (X-10 에는 필요 없는 재료가 섞여요)
+    const inv = comps.reduce((o, c) => { o[c.kind] = (o[c.kind] || 0) + 1; return o; }, {});
     if (w.mats) {
       for (const k of ['clip', 'coin', 'eraser', 'chopstick']) delete inv[k];
       inv[w.mats[si]] = 1;

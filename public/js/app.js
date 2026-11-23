@@ -6,7 +6,7 @@
   const svg = $('#board');
   const L = {
     wires: $('#l-wires'), flow: $('#l-flow'), comps: $('#l-comps'),
-    labels: $('#l-labels'), terms: $('#l-terms'), ui: $('#l-ui'), wave: $('#l-wave'), guide: $('#l-guide'), arrows: $('#l-arrows')
+    labels: $('#l-labels'), terms: $('#l-terms'), ui: $('#l-ui'), wave: $('#l-wave'), guide: $('#l-guide'), arrows: $('#l-arrows'), heat: $('#l-heat'), dark: $('#l-dark'), fx: $('#l-fx')
   };
   const dragPath = $('#drag-wire');
   const GRID = 20, BW = 1000, BH = 640;
@@ -197,6 +197,16 @@
   /* ---------- 부품 그림 (가로 방향, 가운데가 0,0) ---------- */
   function compInner(c, o) {
     const k = c.kind;
+    if (k === 'battery' && c.broken) {   // 펑! 까맣게 탄 전지
+      return `
+        <rect class="hit" x="-62" y="-28" width="124" height="56"/>
+        <line x1="-60" y1="0" x2="-46" y2="0" class="lead" stroke="#495057"/>
+        <rect x="-46" y="-22" width="88" height="44" rx="10" fill="#343a40" stroke="#212529" stroke-width="3" transform="rotate(-4)"/>
+        <path d="M-30 -20 L-20 -4 L-28 6 L-14 20 M10 -20 L4 -6 L16 4 L8 20" stroke="#fa5252" stroke-width="2.5" fill="none"/>
+        <path d="M-40 -12 Q-30 -30 -18 -14 M20 -14 Q32 -32 40 -10" stroke="#868e96" stroke-width="3" fill="none"/>
+        <text x="0" y="8" class="bat-v" style="font-size:15px">탔어요</text>
+        <text x="30" y="-30" class="emo small">💨</text>`;
+    }
     if (k === 'battery') {
       const body = o.short ? '#ff8787' : '#4dabf7', cap = o.short ? '#fa5252' : '#fcc419';
       return `
@@ -391,6 +401,7 @@
 
     flows = fl.map(f => Object.assign(f, { el: L.flow.querySelector(`[data-bk="${f.key}"]`) }));
     renderArrows(short);
+    drawDark();
     lights = [...L.comps.querySelectorAll('[data-light]')];
     if (wave) { prepareWave(); applyWave(); }
     fans = [...L.comps.querySelectorAll('[data-fan]')].map(el => ({ el, id: +el.dataset.fan, I: compInfo(getComp(+el.dataset.fan)).A }));
@@ -445,7 +456,8 @@
     const k = KINDS[c.kind];
     const name = C.displayName(c);
     let val = '', cls = 'val';
-    if (c.kind === 'battery') { val = o.short ? '🔥 뜨거워요!' : (settings.numbers ? '1.5V' + (o.A > PHYS.ACTIVE_A ? ` · ${fmt(o.A)}A` : '') : ''); if (o.short) cls += ' danger'; }
+    if (c.kind === 'battery' && c.broken) { val = '탔어요! 콕 눌러요'; cls += ' danger'; }
+    else if (c.kind === 'battery') { val = o.short ? '🔥 뜨거워요!' : (settings.numbers ? '1.5V' + (o.A > PHYS.ACTIVE_A ? ` · ${fmt(o.A)}A` : '') : ''); if (o.short) cls += ' danger'; }
     else if (c.kind === 'switch') { val = c.open ? '꺼짐' : '켜짐'; cls += c.open ? ' off' : ' on'; }
     else if (c.kind === 'bulb' && c.broken) { val = '고장! 콕 눌러요'; cls += ' danger'; }
     else if (k.cat === 'material') { if (settings.numbers && C.isLoad(c)) val = fmt(o.A) + 'A'; }
@@ -494,6 +506,7 @@
     if (short && !S.wasShort) { sfx.warn(); }
     S.wasShort = short;
     $('#banner').classList.toggle('hidden', !short);
+    if (short) heatUpdate(); else if (S.heat) heatCool();
 
     const ctx = ctxFor();
     const lit = ctx.lit().length;
@@ -519,6 +532,9 @@
     S.wasFlowing = flowing;
     if (!waveDur && lit > S.litCount) sfx.light();
     S.litCount = lit;
+    const litNow = new Set(ctx.lit().map(c => c.id));
+    if (!waveDur) for (const id of litNow) if (!S.litSet || !S.litSet.has(id)) setTimeout(() => lightPop(getComp(id)), 50);
+    S.litSet = litNow;
     if (!flowing) {
       wave = null; L.wave.innerHTML = '';
       if (S.successTok) { const tok = S.successTok; setTimeout(() => { if (S.successTok === tok) { S.successTok = null; showSuccess(); } }, 300); }
@@ -530,6 +546,90 @@
       const left = S.chain - 1; S.chain = 0; clearTimeout(autoT);
       autoT = setTimeout(() => { if (!S.succeeded && !drag && !anyModalOpen()) { giveHint(); S.chain = Math.min(S.chain, left); } }, 1200 + waveDur * 1000);
     } else scheduleAutoHint(waveDur * 1000);
+  }
+
+  /* ---------- 합선 발열: 전지 속 → 이음매 → 전선 → 연기 → 펑! ----------
+   * 열 = I²R. 합선 길에서 저항이 제일 큰 곳은 전지 속(내부저항) → 그다음 이음매(접촉저항) → 전선. */
+  const HEAT_T = [0, 2, 4, 7];              // 단계가 시작하는 시간(초), 7초에 펑! (그 전에 지우면 식어요)
+  const HEAT_MSG = ['', '🔋 ① 전지 속이 뜨거워져요!', '🔴 ② 이음매랑 전선이 빨갛게 달아요!', '💨 ③ 연기가 나요! 곧 터져요!'];
+  const HEAT_SAY = ['', '앗 합선! 전지가 뜨거워져요! 빨리 전선을 지워요!', '전선이 빨개져요!', '연기가 나요! 곧 터져요!'];
+  function heatUpdate() {
+    const big = I => Math.abs(I) > PHYS.SHORT_A;
+    const bats = S.comps.filter(c => c.kind === 'battery' && !c.broken && big(S.sol.comp[c.id].I)).map(c => c.id);
+    const wires = S.wires.filter(w => big(S.sol.wire[w.id] || 0)).map(w => w.id);
+    if (!S.heat) S.heat = { t0: performance.now(), stage: 0 };
+    S.heat.bats = bats; S.heat.wires = wires; S.heat.drawn = -1;
+  }
+  function heatClear() {
+    S.heat = null;
+    if (L.heat) L.heat.innerHTML = '';
+    svg.classList.remove('shake', 'shake-big');
+  }
+  function heatCool() {
+    const st = S.heat.stage;
+    heatClear();
+    if (st >= 1) { toast(st >= 3 ? '휴~ 아슬아슬했어요! 전선을 잘 지웠어요 😮‍💨' : '휴~ 식었어요! 잘 지웠어요 👍', 3000); }
+  }
+  function heatTick(now) {
+    const H = S.heat, e = (now - H.t0) / 1000;
+    if (e >= HEAT_T[3]) { heatBoom(); return; }
+    const stage = e < HEAT_T[1] ? 1 : e < HEAT_T[2] ? 2 : 3;
+    if (stage !== H.stage) {
+      H.stage = stage;
+      $('#banner-txt').textContent = HEAT_MSG[stage];
+      speak(HEAT_SAY[stage]);
+      tone(stage === 3 ? 220 : 300, 0.2, 'sawtooth', 0.06);
+      svg.classList.toggle('shake', stage === 3);
+    }
+    if (H.drawn !== stage) { H.drawn = stage; heatDraw(stage); }
+    // 온도계와 빨갛게 달아오르는 전선
+    $('#thermo-fill').style.width = Math.min(100, e / HEAT_T[3] * 100) + '%';
+    const p = Math.max(0, Math.min(1, (e - HEAT_T[1]) / (HEAT_T[2] - HEAT_T[1])));
+    L.heat.querySelectorAll('.heat-wire').forEach(el => el.setAttribute('stroke-dasharray', `${(p * 100).toFixed(1)} 100`));
+    if (stage === 3 && Math.random() < dtCrackle) noise(0.05, 0.08);   // 지직지직
+  }
+  const dtCrackle = 0.08;
+  function heatDraw(stage) {
+    const H = S.heat;
+    let h = '';
+    const hotBat = new Set(H.bats);
+    for (const id of H.bats) {
+      const c = getComp(id); if (!c) continue;
+      h += `<circle class="heat-glow s${stage}" cx="${c.x}" cy="${c.y}" r="${40 + stage * 16}"/>`;
+      if (stage === 1) h += `<text class="heat-ico" x="${c.x}" y="${c.y - 46}">🌡️</text>`;
+      if (stage >= 3) h += `<text class="heat-fire" x="${c.x - 24}" y="${c.y - 24}">🔥</text><text class="heat-fire b" x="${c.x + 26}" y="${c.y - 20}">🔥</text>`;
+    }
+    for (const id of H.wires) {
+      const w = S.wires.find(x => x.id === id), g = w && wireGeom(w); if (!g) continue;
+      const fromB = hotBat.has(w.a.c) || !hotBat.has(w.b.c);
+      if (stage >= 2) {
+        h += `<path class="heat-wire s${stage}" d="${fromB ? g.d : g.rd}" pathLength="100" stroke-dasharray="0 100"/>`;
+        for (const end of [w.a, w.b]) { const q = termPos(getComp(end.c), end.t); h += `<circle class="heat-joint" cx="${q.x}" cy="${q.y}" r="15"/>`; }
+      }
+      if (stage >= 3) {
+        h += `<text class="heat-smoke" x="${g.mid.x}" y="${g.mid.y}">💨</text><text class="heat-smoke b" x="${g.mid.x + 20}" y="${g.mid.y - 6}">💨</text>`;
+        h += `<text class="heat-fire" x="${g.mid.x - 8}" y="${g.mid.y + 12}">🔥</text>`;
+      }
+    }
+    L.heat.innerHTML = h;
+  }
+  function heatBoom() {
+    const H = S.heat;
+    const bats = H.bats.map(getComp).filter(Boolean);
+    const gone = new Set(H.wires);
+    let h = '';
+    for (const c of bats) h += `<text class="boom" x="${c.x}" y="${c.y + 40}">💥</text>`;
+    heatClear();
+    L.heat.innerHTML = h;
+    setTimeout(() => { if (!S.heat) L.heat.innerHTML = ''; }, 1600);
+    svg.classList.add('shake-big'); setTimeout(() => svg.classList.remove('shake-big'), 900);
+    const fl = document.createElement('div'); fl.className = 'boom-flash'; document.body.appendChild(fl); setTimeout(() => fl.remove(), 900);
+    noise(0.9, 0.6); tone(70, 0.7, 'sawtooth', 0.2); tone(45, 0.9, 'sine', 0.25, 0.05);
+    bats.forEach(c => { c.broken = true; });
+    S.wires = S.wires.filter(w => !gone.has(w.id));      // 전선이 녹아서 끊어졌어요
+    toast('💥 펑! 전지가 터지고 전선이 녹아 끊어졌어요! 까만 전지를 콕 눌러 새 전지로 바꿔요', 6000);
+    speak('펑! 전지가 터지고 전선이 녹아서 끊어졌어요! 진짜로 하면 불이 나고 크게 다쳐요. 까맣게 탄 전지를 콕 눌러서 새 전지로 바꿔요.');
+    recompute();
   }
 
   /* ---------- 오른쪽 패널 ---------- */
@@ -567,7 +667,9 @@
   function renderNote() {
     const an = S.an, el = $('#note');
     if (an.status === 'short') {
-      el.innerHTML = `<div class="warn-box"><div class="big-emo">🔥😱</div><b>앗, 뜨거워요! (합선)</b><br>전기가 전구로 안 가고 지름길로 몰려가요.<br>진짜 전지로 하면 <b>위험해요!</b><br>전선을 콕 눌러서 지워요.</div>`;
+      el.innerHTML = `<div class="warn-box"><div class="big-emo">🔥😱</div><b>앗, 합선이에요!</b><br>전기가 전구로 안 가고 지름길로 몰려가요.<br>
+        <ol class="heat-steps"><li>🔋 전지 속이 제일 먼저 뜨거워져요</li><li>🔴 전선 이음매가 빨갛게 달아요</li><li>💨 전선 껍질이 녹고 연기가 나요</li><li>💥 펑! 전지가 터지고 전선이 녹아 끊어져요</li></ol>
+        <b>빨리 반짝이는 전선을 콕 눌러 지워요!</b></div>`;
       return;
     }
     if (an.status === 'open') {
@@ -598,7 +700,7 @@
     const an = S.an;
     let h = '';
     if (!an || an.status === 'open') h += '<p>지금은 회로가 닫혀 있지 않아 전류가 <b>0A</b>입니다. 전지 (＋)극에서 부하(전구 등)를 거쳐 (−)극으로 돌아오는 닫힌 경로가 필요합니다.</p>';
-    else if (an.status === 'short') h += '<p><b>합선(단락)</b>: 전지의 두 극이 저항이 거의 없는 경로로 직접 이어진 상태입니다. 이론상 매우 큰 전류가 흘러 실제 전지·전선이 발열하며 위험합니다. 이때 전구 쪽에는 전압이 거의 걸리지 않아 꺼집니다.</p>';
+    else if (an.status === 'short') h += '<p><b>합선(단락)</b>: 전지의 두 극이 저항이 거의 없는 경로로 직접 이어진 상태입니다. 이론상 매우 큰 전류가 흘러 실제 전지·전선이 발열하며 위험합니다. 이때 전구 쪽에는 전압이 거의 걸리지 않아 꺼집니다.</p><p><b>화면의 발열 순서</b>: 열은 P = I²R 로 생깁니다. 합선 회로에서 저항이 가장 큰 곳은 <b>전지의 내부저항</b>이라 전지가 가장 먼저·가장 많이 뜨거워지고, 다음으로 접촉저항이 있는 <b>단자·이음매</b>, 그다음 <b>전선</b>이 달아오릅니다. 실제로는 전선 피복이 녹아 연기가 나고, 전지가 부풀거나 새거나(누액) 드물게 파열·발화할 수 있습니다. 화면에서는 약 7초 만에 \'펑\' 하도록 극적으로 줄여 보여 줍니다(실제 시간·정도는 전지 종류에 따라 다름).</p>';
     else {
       for (const s of an.steps) h += `<div class="step${s.big ? ' big' : ''}"><div class="s-label">${s.icon} ${s.label}</div><div class="s-formula">${s.formula}</div>${s.sub ? `<div class="s-sub">${s.sub}</div>` : ''}</div>`;
       if (!an.ok) h += '<p>직렬·병렬이 섞인 회로라 한 줄 공식 대신 부품별 값을 보여줍니다. 각 부품에서 옴의 법칙(V = I × R)이 성립합니다.</p>';
@@ -814,6 +916,7 @@
     S.lastKeys = [c.id + ':0', c.id + ':1'];
     if (c.kind === 'switch') { c.open = !c.open; sfx.click(); }
     else if (c.kind === 'bulb' && c.broken) { c.broken = false; sfx.connect(); toast('새 전구 짠! 💡'); }
+    else if (c.kind === 'battery' && c.broken) { c.broken = false; sfx.connect(); toast('새 전지 짠! 🔋 이번엔 합선 조심!'); }
     recompute();
   }
 
@@ -876,7 +979,7 @@
       if (f.cid != null && front >= Math.min(f.dA, f.dB) && !wave.reached.has(f.cid)) {
         wave.reached.add(f.cid);
         const c = getComp(f.cid);
-        if (c && c.kind === 'bulb' && Math.abs(S.sol.comp[c.id].I) > PHYS.LIT_A) sfx.light();
+        if (c && c.kind === 'bulb' && Math.abs(S.sol.comp[c.id].I) > PHYS.LIT_A) { sfx.light(); lightPop(c); }
       }
     }
     L.wave.innerHTML = html;
@@ -912,6 +1015,8 @@
     }
     if (wave) applyWave();
     moveArrows(dt);
+    if (S.heat) heatTick(t);
+    if (S.night && wave) drawDark();
     for (const f of fans) {
       if (wave && !wave.reached.has(f.id)) continue;
       fanAng[f.id] = ((fanAng[f.id] || 0) + f.I * 540 * dt) % 360;
@@ -937,12 +1042,77 @@
     if (m.id === 'parent') m.classList.add('hidden'); else closeModals();
   }));
 
+  /* ---------- 깜깜한 밤 화면: 불빛이 얼마나 퍼지는지 보여줘요 ----------
+   * 불빛 크기 ∝ √(밝기). 밝기 = 전력 ÷ 기본 전력 (전지 1 + 전구 1 = 1)
+   * 직렬 전구(0.25A) = 밝기 ¼ → 작은 불빛, 전지 2개(1A) = 밝기 4 → 아주 큰 불빛 */
+  let darkKey = '';
+  const STARS = Array.from({ length: 22 }, (_, i) => ({ x: (i * 397 + 61) % 960 + 20, y: (i * 211 + 37) % 600 + 20, d: (i % 7) * 0.3 }));
+  function drawDark() {
+    if (!L.dark) return;
+    if (!S.night) { if (darkKey) { L.dark.innerHTML = ''; darkKey = ''; } return; }
+    const lit = S.comps.filter(c => c.kind === 'bulb' && !c.broken && (!wave || wave.reached.has(c.id)))
+      .map(c => ({ c, b: compInfo(c).b || 0 })).filter(x => x.b > 0.02);
+    const key = 'n' + lit.map(x => `${x.c.id}:${x.c.x}:${x.c.y}:${x.c.rot}:${x.b.toFixed(2)}`).join('|');
+    if (key === darkKey) return;
+    darkKey = key;
+    let holes = '', glows = '';
+    for (const { c, b } of lit) {
+      const g = rotV({ x: 0, y: -48 }, c.rot), x = c.x + g.x, y = c.y + g.y;
+      const r = 55 + 105 * Math.sqrt(Math.min(b, 4));
+      holes += `<circle class="hole" cx="${x}" cy="${y}" r="${r.toFixed(0)}" fill="url(#hole)"/>`;
+      glows += `<circle class="warm" cx="${x}" cy="${y}" r="${(r * 0.9).toFixed(0)}" fill="url(#warm)"/>`;
+    }
+    const stars = STARS.map(s => `<circle class="star" cx="${s.x}" cy="${s.y}" r="2.2" style="animation-delay:${s.d}s"/>`).join('');
+    L.dark.innerHTML = `<defs><mask id="night-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="1000" height="640"><rect width="1000" height="640" fill="#fff"/>${holes}</mask></defs>
+      <g mask="url(#night-mask)"><rect class="night" width="1000" height="640" rx="24"/>${stars}</g>${glows}`;
+  }
+  function syncNight() {
+    const b = $('#btn-night'); if (!b) return;
+    b.innerHTML = S.night ? '☀️<span>밝게</span>' : '🌙<span>깜깜하게</span>';
+    b.classList.toggle('on', !!S.night);
+    drawDark();
+  }
+  $('#btn-night').onclick = () => {
+    audio(); S.night = !S.night; syncNight();
+    if (S.night) speak(S.litCount ? '깜깜한 밤이에요! 전구가 밝을수록 불빛이 넓게 퍼져요.' : '깜깜한 밤이에요! 불을 켜 볼까요?');
+  };
+
+  // 불이 켜지는 순간: 번쩍! 빛 고리 + 반짝이
+  function lightPop(c) {
+    if (!c || !L.fx) return;
+    const g = rotV({ x: 0, y: -48 }, c.rot), x = c.x + g.x, y = c.y + g.y;
+    const el = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    el.setAttribute('class', 'pop');
+    el.innerHTML = `<circle class="pop-ring" cx="${x}" cy="${y}" r="30"/><circle class="pop-ring b" cx="${x}" cy="${y}" r="30"/>` +
+      [0, 60, 120, 180, 240, 300].map((a, i) => { const r = a * Math.PI / 180; return `<text class="pop-spark" x="${x + Math.cos(r) * 70}" y="${y + Math.sin(r) * 70 + 8}" style="animation-delay:${i * 0.05}s">✨</text>`; }).join('') +
+      `<text class="pop-word" x="${x}" y="${y - 70}">반짝!</text>`;
+    L.fx.appendChild(el);
+    setTimeout(() => el.remove(), 1400);
+  }
+
+  // 성공 연출: 전구면 깜깜한 밤에 환하게, 선풍기면 바람이 쌩쌩
+  function successShow() {
+    const litB = S.comps.some(c => c.kind === 'bulb' && !c.broken && Math.abs(S.sol.comp[c.id].I) > PHYS.LIT_A);
+    if (litB && !S.night) { S.night = true; syncNight(); }
+    const fansOn = S.comps.filter(c => c.kind === 'motor' && Math.abs(S.sol.comp[c.id].I) > 0.1);
+    for (const c of fansOn) {
+      const A = Math.abs(S.sol.comp[c.id].I), g = rotV({ x: 0, y: -62 }, c.rot), x = c.x + g.x, y = c.y + g.y;
+      const el = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      el.setAttribute('class', 'wind');
+      el.innerHTML = [-24, 0, 24].map((dy, i) => `<path class="wind-line" style="animation-duration:${(1.2 / Math.max(0.5, A * 2)).toFixed(2)}s;animation-delay:${i * 0.15}s"
+        d="M${x + 30} ${y + dy} q60 -18 120 0 t120 0"/>`).join('') + `<text class="wind-leaf" x="${x + 60}" y="${y}">🍃</text><text class="wind-leaf b" x="${x + 60}" y="${y + 20}">🍃</text>`;
+      L.fx.appendChild(el);
+      setTimeout(() => el.remove(), 6000);
+    }
+  }
+
   // 성공하자마자 화면 한가운데에 크게 "잘했어요!"
   function cheer() {
     if (S.cheered) return;
     S.cheered = true;
     sfx.success(); confetti();
     document.querySelectorAll('.cheer').forEach(el => el.remove());
+    successShow();
     const el = document.createElement('div');
     el.className = 'cheer';
     el.innerHTML = '<div class="cheer-emo">🎉</div><div class="cheer-txt">잘했어요!</div>';
@@ -952,7 +1122,7 @@
   }
   function showSuccess() {
     const m = mission();
-    if (!S.cheered) { sfx.success(); confetti(); }
+    if (!S.cheered) { sfx.success(); confetti(); successShow(); }
     document.querySelectorAll('.cheer').forEach(el => el.remove());
     const hasNext = S.level < MISSIONS.length - 1;
     const worldDone = !m.free && m.stage === 9;
@@ -1123,7 +1293,7 @@
       acts.push({ type: 'wire', a, b, cost: Math.hypot(pa.x - pb.x, pa.y - pb.y) / 1000 });
     }
     for (const c of S.comps) if (c.kind === 'switch') acts.push({ type: 'toggle', id: c.id, cost: 0.2 });
-    for (const c of S.comps) if (c.kind === 'bulb' && c.broken) acts.push({ type: 'fix', id: c.id, cost: 0 });
+    for (const c of S.comps) if (c.broken) acts.push({ type: 'fix', id: c.id, cost: 0 });
     for (const w of S.wires) acts.push({ type: 'unwire', id: w.id, cost: 0.5 });
     for (const c of S.comps) acts.push({ type: 'remove', id: c.id, cost: 0.6 });
     return acts;
@@ -1280,7 +1450,7 @@
       const c = getComp(g.id);
       html += `<circle class="guide-ring" cx="${c.x}" cy="${c.y}" r="46"/>` + burst(c.x, c.y, 0, true);
       html += `<g transform="translate(${c.x - 14} ${c.y + 46})"><text class="guide-hand tap" font-size="46">👆</text></g>`;
-      say = g.type === 'fix' ? `반짝이는 ${eul(C.displayName(c))} 콕 눌러서 새 전구로 바꿔요!` : `반짝이는 ${eul(C.displayName(c))} 콕 눌러 봐요! (지금은 ${c.open ? '꺼짐' : '켜짐'})`;
+      say = g.type === 'fix' ? `반짝이는 ${eul(C.displayName(c))} 콕 눌러서 새 ${c.kind === 'battery' ? '전지' : '전구'}로 바꿔요!` : `반짝이는 ${eul(C.displayName(c))} 콕 눌러 봐요! (지금은 ${c.open ? '꺼짐' : '켜짐'})`;
     } else if (g.type === 'unwire') {
       const w = S.wires.find(x => x.id === g.id), geo = w && wireGeom(w);
       if (geo) {
@@ -1340,8 +1510,8 @@
     S.level = clamp(i, 0, MISSIONS.length - 1);
     progress.level = S.level; save();
     S.comps = []; S.wires = []; S.sel = null; S.selWire = null; S.memo = {}; S.succeeded = false;
-    S.litCount = 0; S.wasShort = false; S.colorIdx = 0;
-    S.nudge = false; S.hintShown = ''; S.hintCount = 0; S.chain = 0; S.successTok = null; S.cheered = false; S.wasFlowing = false; wave = null; S.lastKeys = null; S.levelStart = performance.now(); lastAct = performance.now(); lastNudge = 0;
+    S.litCount = 0; S.litSet = null; S.night = false; S.wasShort = false; if (L.fx) L.fx.innerHTML = ''; syncNight(); S.colorIdx = 0;
+    S.nudge = false; S.hintShown = ''; S.hintCount = 0; S.chain = 0; S.successTok = null; S.cheered = false; heatClear(); S.wasFlowing = false; wave = null; S.lastKeys = null; S.levelStart = performance.now(); lastAct = performance.now(); lastNudge = 0;
     const m = mission();
     const made = ((m.preset && m.preset.comps) || []).map(p => {
       const ex = { rot: p.rot || 0 };

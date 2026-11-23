@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Jua&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=18">
+  <link rel="stylesheet" href="style.css?v=20">
 </head>
 <body>
   <header class="top">
@@ -31,7 +31,7 @@
     </aside>
 
     <section id="board-wrap">
-      <div id="banner" class="banner hidden">🔥 앗, 뜨거워요! 진짜 전지로 하면 위험해요!</div>
+      <div id="banner" class="banner hidden"><span id="banner-txt">🔥 앗, 합선! 빨리 전선을 지워요!</span><span class="thermo"><i id="thermo-fill"></i></span></div>
       <svg id="board" viewBox="0 0 1000 640" preserveAspectRatio="xMidYMid meet">
         <defs>
           <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
@@ -42,6 +42,17 @@
             <stop offset="35%" stop-color="#ffe066" stop-opacity="0.85"/>
             <stop offset="100%" stop-color="#ffd43b" stop-opacity="0"/>
           </radialGradient>
+          <!-- 깜깜한 밤: 불빛 자리만 뚫어요 (검정 = 뚫림) -->
+          <radialGradient id="hole">
+            <stop offset="0%" stop-color="#000"/>
+            <stop offset="45%" stop-color="#000" stop-opacity="1"/>
+            <stop offset="100%" stop-color="#fff"/>
+          </radialGradient>
+          <radialGradient id="warm">
+            <stop offset="0%" stop-color="#fff3bf" stop-opacity=".75"/>
+            <stop offset="40%" stop-color="#ffd43b" stop-opacity=".35"/>
+            <stop offset="100%" stop-color="#ffd43b" stop-opacity="0"/>
+          </radialGradient>
         </defs>
         <rect x="0" y="0" width="1000" height="640" rx="24" fill="#f8fbff"/>
         <rect x="0" y="0" width="1000" height="640" rx="24" fill="url(#grid)"/>
@@ -50,12 +61,16 @@
         <g id="l-arrows"></g>
         <g id="l-comps"></g>
         <g id="l-labels"></g>
+        <g id="l-dark"></g>
         <g id="l-terms"></g>
         <path id="drag-wire" style="display:none"/>
         <g id="l-wave"></g>
+        <g id="l-heat"></g>
+        <g id="l-fx"></g>
         <g id="l-ui"></g>
         <g id="l-guide"></g>
       </svg>
+      <button id="btn-night" class="night-btn" title="불을 끄고 깜깜하게 보기">🌙<span>깜깜하게</span></button>
       <div id="slowmo" class="slowmo hidden">🐢 아주아주 느리게 보여주는 중! 진짜는 눈 깜짝할 사이보다 훨씬 빨라요 ⚡</div>
       <div id="toast"></div>
       <button id="fab-hint" class="fab-hint" title="막혔을 때 눌러요">💡<span>도와줘</span></button>
@@ -150,9 +165,9 @@
     </div>
   </div>
 
-  <script src="js/sim.js?v=18"></script>
-  <script src="js/missions.js?v=18"></script>
-  <script src="js/stages.js?v=18"></script>
-  <script src="js/app.js?v=18"></script>
+  <script src="js/sim.js?v=20"></script>
+  <script src="js/missions.js?v=20"></script>
+  <script src="js/stages.js?v=20"></script>
+  <script src="js/app.js?v=20"></script>
 </body>
 </html>
