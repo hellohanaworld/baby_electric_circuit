@@ -1055,16 +1055,29 @@
     const key = 'n' + lit.map(x => `${x.c.id}:${x.c.x}:${x.c.y}:${x.c.rot}:${x.b.toFixed(2)}`).join('|');
     if (key === darkKey) return;
     darkKey = key;
-    let holes = '', glows = '';
+    // 마스크 없이 그려요 (오래된 브라우저에서도 보이게): 깜깜한 판 위에 불 켜진 전구만 환하게
+    let lights = '';
     for (const { c, b } of lit) {
-      const g = rotV({ x: 0, y: -48 }, c.rot), x = c.x + g.x, y = c.y + g.y;
-      const r = 55 + 105 * Math.sqrt(Math.min(b, 4));
-      holes += `<circle class="hole" cx="${x}" cy="${y}" r="${r.toFixed(0)}" fill="url(#hole)"/>`;
-      glows += `<circle class="warm" cx="${x}" cy="${y}" r="${(r * 0.9).toFixed(0)}" fill="url(#warm)"/>`;
+      const k = Math.sqrt(Math.min(b, 4));                 // 밝기 ¼ → 0.5, 1 → 1, 4 → 2
+      const R = 60 + 110 * k, op = Math.min(1, 0.45 + 0.55 * Math.min(1, b));
+      let rays = '';
+      for (let i = 0; i < 10; i++) {
+        const a2 = i / 10 * Math.PI * 2, r1 = 34, r2 = 34 + 14 + 22 * Math.min(1.5, k);
+        rays += `<line x1="${(Math.cos(a2) * r1).toFixed(1)}" y1="${(-48 + Math.sin(a2) * r1).toFixed(1)}" x2="${(Math.cos(a2) * r2).toFixed(1)}" y2="${(-48 + Math.sin(a2) * r2).toFixed(1)}" class="night-ray"/>`;
+      }
+      lights += `<g class="night-light" opacity="${op.toFixed(2)}" transform="translate(${c.x} ${c.y}) rotate(${c.rot})">
+        <circle cx="0" cy="-48" r="${R.toFixed(0)}" fill="url(#warm)"/>
+        <circle cx="0" cy="-48" r="${(R * 0.45).toFixed(0)}" fill="url(#glow)"/>
+        ${rays}
+        <circle cx="0" cy="-48" r="25" fill="#fffbe6" stroke="#ffe066" stroke-width="3"/>
+        <path d="M-6 -26 L-6 -44 L-3 -50 L0 -44 L3 -50 L6 -44 L6 -26" fill="none" stroke="#ff922b" stroke-width="2.6" stroke-linejoin="round"/>
+        <rect x="-12" y="-27" width="24" height="16" rx="3" fill="#7d6a4a" opacity=".8"/></g>`;
     }
-    const stars = STARS.map(s => `<circle class="star" cx="${s.x}" cy="${s.y}" r="2.2" style="animation-delay:${s.d}s"/>`).join('');
-    L.dark.innerHTML = `<defs><mask id="night-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="1000" height="640"><rect width="1000" height="640" fill="#fff"/>${holes}</mask></defs>
-      <g mask="url(#night-mask)"><rect class="night" width="1000" height="640" rx="24"/>${stars}</g>${glows}`;
+    if (!L.dark.querySelector('.night-lights')) {     // 깜깜한 판은 한 번만 (불빛만 바꿔 그려요)
+      const stars = STARS.map(s => `<circle class="star" cx="${s.x}" cy="${s.y}" r="2.2" style="animation-delay:${s.d}s"/>`).join('');
+      L.dark.innerHTML = `<rect class="night" width="1000" height="640" rx="24"/>${stars}<g class="night-lights"></g>`;
+    }
+    L.dark.querySelector('.night-lights').innerHTML = lights;
   }
   function syncNight() {
     const b = $('#btn-night'); if (!b) return;
@@ -1083,7 +1096,8 @@
     const g = rotV({ x: 0, y: -48 }, c.rot), x = c.x + g.x, y = c.y + g.y;
     const el = document.createElementNS('http://www.w3.org/2000/svg', 'g');
     el.setAttribute('class', 'pop');
-    el.innerHTML = `<circle class="pop-ring" cx="${x}" cy="${y}" r="30"/><circle class="pop-ring b" cx="${x}" cy="${y}" r="30"/>` +
+    const ring = d => `<circle class="pop-ring" cx="${x}" cy="${y}" r="20" opacity="0"><animate attributeName="r" values="20;130" dur="0.9s" begin="${d}s" fill="freeze"/><animate attributeName="opacity" values="1;0" dur="0.9s" begin="${d}s" fill="freeze"/></circle>`;
+    el.innerHTML = ring(0) + ring(0.2) +
       [0, 60, 120, 180, 240, 300].map((a, i) => { const r = a * Math.PI / 180; return `<text class="pop-spark" x="${x + Math.cos(r) * 70}" y="${y + Math.sin(r) * 70 + 8}" style="animation-delay:${i * 0.05}s">✨</text>`; }).join('') +
       `<text class="pop-word" x="${x}" y="${y - 70}">반짝!</text>`;
     L.fx.appendChild(el);
