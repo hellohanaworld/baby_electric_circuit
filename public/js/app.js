@@ -511,7 +511,7 @@
     const ctx = ctxFor();
     const lit = ctx.lit().length;
     const flowing = S.an.status === 'ok';
-    let waveDur = 0, afterWave = null;
+    let waveDur = 0, afterWave = null, justWon = false;
 
     const m = mission();
     if (m.check && !short) {
@@ -521,12 +521,12 @@
         if (!progress.done.includes(S.level)) progress.done.push(S.level);
         save();
         // 성공 화면은 흐름 애니메이션이 중간에 끊겨도 꼭 나와요
-        const tok = {}; S.successTok = tok;
+        const tok = {}; S.successTok = tok; justWon = true;
         const fire = () => { if (S.successTok !== tok) return; S.successTok = null; showSuccess(); };
         setTimeout(() => { if (S.successTok === tok) cheer(); }, flowing ? 500 : 0);   // 바로 화면 가운데에 "잘했어요!"
         // 어둠 속 불빛 쇼를 볼 시간을 주고 나서 축하 창을 띄워요
         if (flowing) { waveDur = 2.4; afterWave = () => setTimeout(fire, 2000); setTimeout(fire, 2400 + 2000 + 700); }
-        else setTimeout(fire, 1200);
+        else setTimeout(fire, 5000);   // 스위치를 꺼서 성공: 다시 켜서 보여주는 쇼(successShow)를 본 뒤에
       }
     }
     if (!waveDur && flowing && !S.wasFlowing) waveDur = 2.6;   // 새로 이어졌을 때
@@ -538,7 +538,7 @@
     S.litSet = litNow;
     if (!flowing) {
       wave = null; L.wave.innerHTML = '';
-      if (S.successTok) { const tok = S.successTok; setTimeout(() => { if (S.successTok === tok) { S.successTok = null; showSuccess(); } }, 300); }
+      if (S.successTok && !justWon) { const tok = S.successTok; setTimeout(() => { if (S.successTok === tok) { S.successTok = null; showSuccess(); } }, 300); }
     }
     renderBoard(); renderNote(); renderBars(); renderMission();
     if (waveDur) startWave(waveDur, afterWave);
@@ -1118,11 +1118,31 @@
 
   // 성공 연출: 전구면 깜깜한 밤에 환하게, 선풍기면 바람이 쌩쌩
   function successShow() {
+    // 스위치를 꺼서 성공했으면(스위치 미션): 깜깜해진 뒤 스위치를 다시 "딸깍" 켜서,
+    // 어둠 속에서 불이 켜지고 화살표가 흐르는 걸 보여줘요
+    const isRun = c => (c.kind === 'bulb' && !c.broken && Math.abs(S.sol.comp[c.id].I) > PHYS.LIT_A) || (c.kind === 'motor' && Math.abs(S.sol.comp[c.id].I) > 0.1);
+    const offSw = S.comps.filter(c => c.kind === 'switch' && c.open && C.wouldConduct(S.comps, S.wires, c));
+    if (!S.comps.some(isRun) && offSw.length) {
+      if (S.comps.some(c => c.kind === 'bulb')) { S.night = true; darkKey = ''; syncNight(); }
+      tone(1200, 0.05, 'square', 0.05);
+      setTimeout(() => {
+        if (!S.succeeded) return;
+        offSw.forEach(c => { c.open = false; });
+        sfx.click();
+        S.lastKeys = offSw.flatMap(c => [c.id + ':0', c.id + ':1']);
+        recompute();
+        showLights('깜깜할 때 스위치를 딸깍 켜면, 불이 환하게 켜져요!');
+      }, 1100);
+      return;
+    }
+    showLights('깜깜한 밤에도 우리 전구가 환하게 빛나요!');
+  }
+  function showLights(msg) {
     const litB = S.comps.some(c => c.kind === 'bulb' && !c.broken && Math.abs(S.sol.comp[c.id].I) > PHYS.LIT_A);
     if (litB) {
       S.night = true; S.nightShow = performance.now(); darkKey = ''; syncNight();
       tone(1200, 0.05, 'square', 0.05);                                  // 딸깍 (불 끄는 소리)
-      setTimeout(() => { if (S.night) speak('깜깜한 밤에도 우리 전구가 환하게 빛나요!'); }, 1500);
+      setTimeout(() => { if (S.night) speak(msg); }, 1500);
     }
     const fansOn = S.comps.filter(c => c.kind === 'motor' && Math.abs(S.sol.comp[c.id].I) > 0.1);
     for (const c of fansOn) {
